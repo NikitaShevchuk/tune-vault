@@ -1,87 +1,111 @@
+import { Injectable, Logger } from '@nestjs/common';
 import {
+  VoiceConnectionStatus,
   createAudioPlayer,
   createAudioResource,
+  getVoiceConnection,
   joinVoiceChannel,
 } from '@discordjs/voice';
-import { Injectable, Logger } from '@nestjs/common';
-import { Client, GuildMember, IntentsBitField, Interaction } from 'discord.js';
-import { join } from 'path';
-// import * as ytdl from 'ytdl-core';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChatInputCommandInteraction,
+  Client,
+  EmbedBuilder,
+  GuildMember,
+  Interaction,
+  MessageActionRowComponentBuilder,
+} from 'discord.js';
+import {
+  stream as streamFromYtLink,
+  video_info as getVideoInfo,
+} from 'play-dl';
 
-enum Commands {
-  PING = 'ping',
-  GLORY_UKRAINE = 'slavaukraini',
-  PLAY = 'play',
-  P = 'p',
-}
+import { ButtonIds, Commands, commands, intents } from 'src/discord/constants';
+import { DiscordHelperService } from 'src/discord/discord.helper.service';
 
 @Injectable()
 export class DiscordService {
-  private readonly intents = [
-    IntentsBitField.Flags.Guilds,
-    IntentsBitField.Flags.GuildMessages,
-    IntentsBitField.Flags.MessageContent,
-    IntentsBitField.Flags.GuildMembers,
-    IntentsBitField.Flags.GuildVoiceStates,
-  ];
-  private readonly commands = [
-    {
-      name: Commands.PING,
-      description: 'Replies with Pong!',
-    },
-    {
-      name: Commands.GLORY_UKRAINE,
-      description: 'Replies with Geroyam Slava!',
-    },
-    {
-      name: Commands.PLAY,
-      description: 'Plays music from link',
-    },
-    {
-      name: Commands.P,
-      description:
-        'Plays music from YouTube link. Shortcut for the /play command',
-    },
-  ];
-
   private readonly logger = new Logger(DiscordService.name);
   private readonly client = new Client({
-    intents: this.intents,
+    intents,
   });
-  // private readonly discordRest = new REST({ version: '10' }).setToken(
-  //   process.env.DISCORD_BOT_TOKEN,
-  // );
+
+  constructor(private readonly discordHelperService: DiscordHelperService) {}
 
   public initialize() {
+    // Handle errors
+    this.client.on('error', (error) => {
+      this.logger.error('An error occurred.', error);
+    });
+
+    // Login
     this.client.login(process.env.DISCORD_BOT_TOKEN);
     this.client.on('ready', () => {
       this.logger.log(`🚀 Logged in as 🟢${this.client.user.tag}`);
     });
 
-    this.client.on('messageCreate', (message) => {
-      if (message.author.bot) {
-        return;
-      }
-      this.logger.log(message.content);
-      message.reply('іді нахуй');
-    });
-
+    // Set commands when joining a server
     this.client.on('guildCreate', (guild) => {
       this.logger.log(`👋 Joined server: ${guild.name}`);
-      console.log(this.commands);
-      guild.commands.set(this.commands);
+      guild.commands.set(commands);
     });
-    this.client.on('interactionCreate', (interaction) =>
-      this.handleCommand(interaction),
-    );
+
+    // Handle interactions. NOTE: Potential place for exceptions
+    this.client.on('interactionCreate', (i) => this.handleInteraction(i));
   }
 
-  private handleCommand(interaction: Interaction) {
+  private handleInteraction(interaction: Interaction): void {
+    try {
+      this.logger.log(
+        `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}. Is select menu: ${interaction.isSelectMenu()}.`,
+      );
+      if (interaction.isCommand()) {
+        this.handleCommand(interaction);
+        return;
+      }
+      if (interaction.isButton()) {
+        this.logger.log('Button interaction detected.');
+        this.handleButton(interaction);
+        return;
+      }
+
+      throw new Error('Unknown interaction type');
+    } catch (e) {
+      this.logger.error('Failed to handle an interaction.', e);
+    }
+  }
+
+  private handleButton(interaction: Interaction): void {
+    if (!interaction.isButton()) {
+      return;
+    }
+
+    const buttonId = interaction.customId;
+
+    if (buttonId === ButtonIds.PREVIOUS) {
+      this.logger.log('Previous button clicked.');
+    }
+    if (buttonId === ButtonIds.PLAY_PAUSE) {
+      this.logger.log('Play/Pause button clicked.');
+    }
+    if (buttonId === ButtonIds.NEXT) {
+      this.logger.log('Next button clicked.');
+    }
+    if (buttonId === ButtonIds.DISCONNECT) {
+      const connection = getVoiceConnection(interaction.guild.id);
+      connection.destroy();
+      interaction.reply('Disconnected');
+    }
+  }
+
+  private async handleCommand(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) {
       return;
     }
 
-    const isUnknownCommand = !this.commands.find(
+    const isUnknownCommand = !commands.find(
       ({ name }) => name === interaction.commandName,
     );
     if (isUnknownCommand) {
@@ -89,40 +113,122 @@ export class DiscordService {
       return;
     }
 
-    if (interaction.commandName === Commands.PING) {
-      interaction.reply('Pong!');
+    if (interaction.commandName === Commands.REFRESH_COMMANDS) {
+      interaction.guild.commands.set(commands);
     }
-    if (interaction.commandName === Commands.GLORY_UKRAINE) {
-      interaction.reply('Geroyam Slava!');
-    }
+
     if (
       [Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)
     ) {
-      interaction.reply('Coming soon...');
-      const connection = joinVoiceChannel({
-        channelId: (interaction.member as GuildMember).voice.channel.id,
-        guildId: interaction.guild.id,
-        adapterCreator: interaction.guild.voiceAdapterCreator,
-      });
+      this.handlePlayCommand(interaction);
+    }
+  }
 
+  private async handlePlayCommand(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    const userInput = interaction.options.getString('link');
+
+    if (!(interaction.member as GuildMember).voice.channel) {
+      await interaction.reply(
+        '⛔ You must be in a voice channel to use this command',
+      );
+      return;
+    }
+    if (!this.discordHelperService.validateUserInput(userInput)) {
+      await interaction.reply('⛔ Invalid link');
+      return;
+    }
+
+    this.playAudioFromUserInput(interaction, userInput);
+
+    await interaction.reply('Loading details...');
+    const embedVideoInfo = await this.getEmbedVideoInfo(userInput);
+    const actionsRow = this.getActionRow();
+    await interaction.editReply({
+      embeds: [embedVideoInfo],
+      content: '',
+      components: [actionsRow],
+    });
+  }
+
+  private playAudioFromUserInput(
+    interaction: Interaction,
+    userInput: string,
+  ): void {
+    const connection = joinVoiceChannel({
+      channelId: (interaction.member as GuildMember).voice.channel.id,
+      guildId: interaction.guild.id,
+      adapterCreator: interaction.guild.voiceAdapterCreator,
+    });
+
+    connection.on('error', (error) => {
+      this.logger.error('An error occurred with the connection.', error);
+    });
+    connection.on(VoiceConnectionStatus.Ready, async () => {
       const player = createAudioPlayer();
+      const { stream } = await streamFromYtLink(userInput, {
+        discordPlayerCompatibility: true,
+      });
+      const resource = createAudioResource(stream);
+
       connection.subscribe(player);
 
-      // const stream = ytdl(
-      //   'https://www.youtube.com/watch?v=4kIG3rtyBAA&ab_channel=%D0%90%D0%BD%D0%B0%D1%80%D1%85%D0%B8%D1%81%D1%82LIVE',
-      //   { filter: 'audioonly' },
-      // );
+      try {
+        player.play(resource);
+      } catch (e) {
+        this.logger.error('Failed to play audio.', e);
+      }
+    });
+  }
 
-      const resource = createAudioResource(
-        join(process.cwd(), './src/images/test.ogg'),
+  private async getEmbedVideoInfo(userInput: string): Promise<EmbedBuilder> {
+    const { video_details: videoInfo } = await getVideoInfo(userInput);
+    const thumbnail = videoInfo.thumbnails.at(-1).url;
+    const authorThumbnail = videoInfo.channel.icons.at(-1).url;
+
+    return new EmbedBuilder()
+      .setColor(0x0099ff)
+      .setTitle(`${videoInfo.title}`)
+      .setURL(videoInfo.url)
+      .setAuthor({
+        name: videoInfo.channel.name,
+        iconURL: authorThumbnail,
+        url: videoInfo.channel.url,
+      })
+      .setThumbnail(thumbnail)
+      .setDescription(
+        `▶︎ ${this.discordHelperService.formatDuration(videoInfo.durationInSec)} •၊၊||။‌‌‌‌‌၊|•`,
       );
+  }
 
-      player.play(resource);
-      // player.on(AudioPlayerStatus.Idle, () => {
-      //   connection.destroy();
-      // });
+  private getActionRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
+    const prevButton = new ButtonBuilder()
+      .setCustomId(ButtonIds.PREVIOUS)
+      .setEmoji('⏮')
+      .setStyle(ButtonStyle.Secondary);
 
-      setTimeout(() => connection.destroy(), 20_000);
-    }
+    const playButton = new ButtonBuilder()
+      .setCustomId(ButtonIds.PLAY_PAUSE)
+      .setEmoji('⏯')
+      .setStyle(ButtonStyle.Secondary);
+
+    const nextButton = new ButtonBuilder()
+      .setCustomId(ButtonIds.NEXT)
+      .setEmoji('⏭')
+
+      .setStyle(ButtonStyle.Secondary);
+
+    const disconnectButton = new ButtonBuilder()
+      .setCustomId(ButtonIds.DISCONNECT)
+      .setEmoji('⛔')
+      .setStyle(ButtonStyle.Danger);
+
+    return new ActionRowBuilder().addComponents(
+      prevButton,
+      playButton,
+      nextButton,
+      disconnectButton,
+    ) as ActionRowBuilder<MessageActionRowComponentBuilder>;
   }
 }
