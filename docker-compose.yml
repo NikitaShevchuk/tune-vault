@@ -1,0 +1,26 @@
+version: '3.1'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: app
+    ports:
+      - '3000:3000'
+    networks:
+      - redis
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - '6379:6379'
+    networks:
+      - redis
+
+networks:
+  redis:
+    driver: bridge

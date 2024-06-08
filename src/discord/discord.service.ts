@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  AudioPlayerStatus,
   VoiceConnectionStatus,
   createAudioPlayer,
   createAudioResource,
@@ -12,18 +13,16 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   Client,
-  EmbedBuilder,
   GuildMember,
   Interaction,
   MessageActionRowComponentBuilder,
 } from 'discord.js';
-import {
-  stream as streamFromYtLink,
-  video_info as getVideoInfo,
-} from 'play-dl';
+import { stream as streamFromYtLink } from 'play-dl';
 
 import { ButtonIds, Commands, commands, intents } from 'src/discord/constants';
 import { DiscordHelperService } from 'src/discord/discord.helper.service';
+import { YoutubeService } from 'src/youtube/youtube.service';
+import { PlayQueueService } from '../play.queue/play.queue.service';
 
 @Injectable()
 export class DiscordService {
@@ -32,7 +31,11 @@ export class DiscordService {
     intents,
   });
 
-  constructor(private readonly discordHelperService: DiscordHelperService) {}
+  constructor(
+    private readonly discordHelperService: DiscordHelperService,
+    private readonly youtubeService: YoutubeService,
+    private readonly playQueueService: PlayQueueService,
+  ) {}
 
   public initialize() {
     // Handle errors
@@ -62,22 +65,22 @@ export class DiscordService {
         `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}. Is select menu: ${interaction.isSelectMenu()}.`,
       );
       if (interaction.isCommand()) {
-        this.handleCommand(interaction);
+        this.handleCommandInteraction(interaction);
         return;
       }
       if (interaction.isButton()) {
         this.logger.log('Button interaction detected.');
-        this.handleButton(interaction);
+        this.handleButtonInteraction(interaction);
         return;
       }
 
-      throw new Error('Unknown interaction type');
+      this.logger.error('Unknown interaction type.');
     } catch (e) {
       this.logger.error('Failed to handle an interaction.', e);
     }
   }
 
-  private handleButton(interaction: Interaction): void {
+  private handleButtonInteraction(interaction: Interaction): void {
     if (!interaction.isButton()) {
       return;
     }
@@ -95,12 +98,15 @@ export class DiscordService {
     }
     if (buttonId === ButtonIds.DISCONNECT) {
       const connection = getVoiceConnection(interaction.guild.id);
-      connection.destroy();
+      connection?.destroy();
       interaction.reply('Disconnected');
+      this.playQueueService.destroyQueue(interaction.guild.id);
     }
   }
 
-  private async handleCommand(interaction: Interaction): Promise<void> {
+  private async handleCommandInteraction(
+    interaction: Interaction,
+  ): Promise<void> {
     if (!interaction.isChatInputCommand()) {
       return;
     }
@@ -135,71 +141,111 @@ export class DiscordService {
       );
       return;
     }
-    if (!this.discordHelperService.validateUserInput(userInput)) {
+
+    const { isValid, isVideo, isPlaylist } =
+      this.youtubeService.validateAndGetLinkInfo(userInput);
+
+    if (!isValid) {
       await interaction.reply('⛔ Invalid link');
       return;
     }
 
-    this.playAudioFromUserInput(interaction, userInput);
+    const hasItemsInQueue = Boolean(
+      await this.playQueueService.getQueue(interaction.guild.id),
+    );
 
-    await interaction.reply('Loading details...');
-    const embedVideoInfo = await this.getEmbedVideoInfo(userInput);
-    const actionsRow = this.getActionRow();
-    await interaction.editReply({
-      embeds: [embedVideoInfo],
-      content: '',
-      components: [actionsRow],
-    });
+    if (hasItemsInQueue) {
+      await this.playQueueService.pushToQueue(interaction.guild.id, userInput);
+      const { title } = await this.youtubeService.getVideoInfo(userInput);
+
+      await interaction.reply(`**${title}** added to queue`);
+      return;
+    }
+
+    if (isVideo) {
+      await this.playQueueService.pushToQueue(interaction.guild.id, userInput);
+      this.playAudio(interaction);
+
+      await interaction.reply('Loading details...');
+
+      const embedVideoInfo =
+        await this.youtubeService.getEmbedVideoInfoForDiscord(userInput);
+      const actionsRow = this.getActionRow();
+
+      await interaction.editReply({
+        embeds: [embedVideoInfo],
+        content: '',
+        components: [actionsRow],
+      });
+    }
+
+    if (isPlaylist) {
+      const videosUrls = await this.youtubeService.getPlaylistInfo(userInput);
+      this.playQueueService.pushToQueue(interaction.guild.id, videosUrls);
+    }
   }
 
-  private playAudioFromUserInput(
-    interaction: Interaction,
-    userInput: string,
-  ): void {
-    const connection = joinVoiceChannel({
-      channelId: (interaction.member as GuildMember).voice.channel.id,
-      guildId: interaction.guild.id,
-      adapterCreator: interaction.guild.voiceAdapterCreator,
-    });
+  private async playAudio(interaction: Interaction): Promise<void> {
+    const itemToPlay = await this.playQueueService.getNextItem(
+      interaction.guild.id,
+    );
+    if (!itemToPlay) {
+      this.logger.error('Warning! No items to play. We should not be here.');
+      return;
+    }
 
-    connection.on('error', (error) => {
-      this.logger.error('An error occurred with the connection.', error);
-    });
-    connection.on(VoiceConnectionStatus.Ready, async () => {
-      const player = createAudioPlayer();
-      const { stream } = await streamFromYtLink(userInput, {
-        discordPlayerCompatibility: true,
+    const existingConnection = getVoiceConnection(interaction.guild.id);
+    const connection =
+      existingConnection ??
+      joinVoiceChannel({
+        channelId: (interaction.member as GuildMember).voice.channel.id,
+        guildId: interaction.guild.id,
+        adapterCreator: interaction.guild.voiceAdapterCreator,
+        selfDeaf: true,
       });
-      const resource = createAudioResource(stream);
+    const player = createAudioPlayer();
 
-      connection.subscribe(player);
-
+    connection.on(VoiceConnectionStatus.Ready, async () => {
       try {
+        const { stream } = await streamFromYtLink(itemToPlay.url, {
+          discordPlayerCompatibility: true,
+        });
+        const resource = createAudioResource(stream);
+        connection.subscribe(player);
         player.play(resource);
       } catch (e) {
         this.logger.error('Failed to play audio.', e);
       }
     });
-  }
 
-  private async getEmbedVideoInfo(userInput: string): Promise<EmbedBuilder> {
-    const { video_details: videoInfo } = await getVideoInfo(userInput);
-    const thumbnail = videoInfo.thumbnails.at(-1).url;
-    const authorThumbnail = videoInfo.channel.icons.at(-1).url;
+    player.on('stateChange', async (_, { status }) => {
+      if (status === AudioPlayerStatus.Idle) {
+        const nextItem = await this.playQueueService.getNextItem(
+          interaction.guild.id,
+        );
+        if (!nextItem) {
+          connection.destroy();
+          this.playQueueService.destroyQueue(interaction.guild.id);
+          return;
+        }
+        const { stream } = await streamFromYtLink(itemToPlay.url, {
+          discordPlayerCompatibility: true,
+        });
+        const resource = createAudioResource(stream);
+        player.play(resource);
+      }
+    });
 
-    return new EmbedBuilder()
-      .setColor(0x0099ff)
-      .setTitle(`${videoInfo.title}`)
-      .setURL(videoInfo.url)
-      .setAuthor({
-        name: videoInfo.channel.name,
-        iconURL: authorThumbnail,
-        url: videoInfo.channel.url,
-      })
-      .setThumbnail(thumbnail)
-      .setDescription(
-        `▶︎ ${this.discordHelperService.formatDuration(videoInfo.durationInSec)} •၊၊||။‌‌‌‌‌၊|•`,
-      );
+    connection.on('error', (error) => {
+      this.logger.error('An error occurred with the voice connection.', error);
+      this.playQueueService.destroyQueue(interaction.guild.id);
+    });
+    connection.on(VoiceConnectionStatus.Disconnected, () => {
+      this.playQueueService.destroyQueue(interaction.guild.id);
+    });
+    connection.on(VoiceConnectionStatus.Destroyed, () => {
+      this.playQueueService.destroyQueue(interaction.guild.id);
+    });
   }
 
   private getActionRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
@@ -222,7 +268,7 @@ export class DiscordService {
     const disconnectButton = new ButtonBuilder()
       .setCustomId(ButtonIds.DISCONNECT)
       .setEmoji('⛔')
-      .setStyle(ButtonStyle.Danger);
+      .setStyle(ButtonStyle.Secondary);
 
     return new ActionRowBuilder().addComponents(
       prevButton,
