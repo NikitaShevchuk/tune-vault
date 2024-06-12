@@ -35,22 +35,13 @@ export class DiscordPlayerMessageService {
   ): Promise<Message | null> {
     const playerMessageId = await this.get(interaction.guild.id);
     if (!playerMessageId) {
-      return await this.replyToInteractionAndSaveMessageId(
-        interaction,
-        message,
-      );
+      return await this.replyToInteractionAndSaveMessageId(interaction, message);
     }
-    return await this.editExistingMessage(
-      interaction,
-      message,
-      playerMessageId,
-    );
+    return await this.editExistingMessage(interaction, message, playerMessageId);
   }
 
   public async delete(guildId: string): Promise<void> {
-    const allPlayersMessagesIds = await this.cacheManager.get<
-      Record<string, string>
-    >(PLAYER_MESSAGES_IDS_KEY);
+    const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
 
     if (!allPlayersMessagesIds?.[guildId]) {
       return;
@@ -61,9 +52,7 @@ export class DiscordPlayerMessageService {
     await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, allPlayersMessagesIds);
   }
 
-  public async getPlayerMessagePayload(
-    guildId: string,
-  ): Promise<InteractionReplyOptions> {
+  public async getPlayerMessagePayload(guildId: string): Promise<InteractionReplyOptions> {
     const currentVideo = await this.playQueueService.getCurrentItem(guildId);
     const nextVideo = await this.playQueueService.getNextItem({
       guildId,
@@ -76,11 +65,7 @@ export class DiscordPlayerMessageService {
       };
     }
 
-    const embedVideoInfo =
-      await this.youtubeService.getEmbedVideoInfoForDiscord(
-        currentVideo.url,
-        nextVideo?.url,
-      );
+    const embedVideoInfo = await this.youtubeService.getEmbedVideoInfoForDiscord(currentVideo.url, nextVideo?.url);
     const actionsRow = this.getActionRow();
 
     return {
@@ -126,8 +111,7 @@ export class DiscordPlayerMessageService {
     playerMessageId: string,
   ): Promise<Message | null> {
     try {
-      const existingMessage =
-        await interaction.channel.messages.fetch(playerMessageId);
+      const existingMessage = await interaction.channel.messages.fetch(playerMessageId);
       if (existingMessage) {
         await existingMessage.edit(message as MessageEditOptions);
         return existingMessage;
@@ -147,10 +131,9 @@ export class DiscordPlayerMessageService {
       const newInteractionReply = await interaction.reply(message);
       if (newInteractionReply) {
         const newMessage = await newInteractionReply.fetch();
-        const allPlayersMessagesIds = await this.cacheManager.get<Record<
-          string,
-          string
-        > | null>(PLAYER_MESSAGES_IDS_KEY);
+        const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string> | null>(
+          PLAYER_MESSAGES_IDS_KEY,
+        );
 
         await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, {
           ...(allPlayersMessagesIds ?? {}),
@@ -160,19 +143,14 @@ export class DiscordPlayerMessageService {
         return newMessage;
       }
     } catch (e) {
-      this.logger.error(
-        'Failed to reply to interaction and save message id.',
-        e,
-      );
+      this.logger.error('Failed to reply to interaction and save message id.', e);
       return null;
     }
     return null;
   }
 
   private async get(guildId: string): Promise<string | null> {
-    const playerMessagesIds = await this.cacheManager.get<
-      Record<string, string>
-    >(PLAYER_MESSAGES_IDS_KEY);
+    const playerMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
 
     if (playerMessagesIds && playerMessagesIds[guildId]) {
       return playerMessagesIds[guildId];

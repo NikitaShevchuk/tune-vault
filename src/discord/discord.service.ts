@@ -88,16 +88,12 @@ export class DiscordService {
     }
   }
 
-  private async handleCommandInteraction(
-    interaction: Interaction,
-  ): Promise<void> {
+  private async handleCommandInteraction(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) {
       return;
     }
 
-    const isUnknownCommand = !commands.find(
-      ({ name }) => name === interaction.commandName,
-    );
+    const isUnknownCommand = !commands.find(({ name }) => name === interaction.commandName);
     if (isUnknownCommand) {
       interaction.reply('Command not found');
       return;
@@ -107,9 +103,7 @@ export class DiscordService {
       interaction.guild.commands.set(commands);
     }
 
-    if (
-      [Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)
-    ) {
+    if ([Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)) {
       this.discordHelperService.handlePlayCommand(interaction);
     }
   }

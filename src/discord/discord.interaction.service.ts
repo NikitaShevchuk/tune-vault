@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  ChatInputCommandInteraction,
-  EmbedBuilder,
-  GuildMember,
-} from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder, GuildMember } from 'discord.js';
 
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
@@ -21,43 +17,38 @@ export class DiscordInteractionService {
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
   ) {}
 
-  public async handlePlayCommand(
-    interaction: ChatInputCommandInteraction,
-  ): Promise<void> {
+  public async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     const userInput = interaction.options.getString('link');
 
     if (!(interaction.member as GuildMember).voice.channel) {
-      await interaction.reply(
-        '⛔ You must be in a voice channel to use this command',
-      );
+      await interaction.reply('⛔ You must be in a voice channel to use this command');
       return;
     }
 
-    const { isValid, isVideo, isPlaylist } =
-      this.youtubeService.validateAndGetLinkInfo(userInput);
+    const { isValid, isVideo, isPlaylist } = this.youtubeService.validateAndGetLinkInfo(userInput);
 
     if (!isValid) {
       await interaction.reply('⛔ Invalid link');
       return;
     }
 
-    const hasItemsInQueue = Boolean(
-      await this.playQueueService.getQueue(interaction.guild.id),
-    );
+    await this.discordPlayerMessageService.editOrCreate(interaction, 'Loading details...');
+
+    const hasItemsInQueue = Boolean(await this.playQueueService.getQueue(interaction.guild.id));
 
     if (hasItemsInQueue && !isPlaylist) {
       await this.pushSingleItemToQueue({ interaction, mediaUrl: userInput });
     }
 
     if (!hasItemsInQueue && isVideo) {
-      this.playMedia({ interaction, mediaUrl: userInput, pushToQueue: true });
+      await this.playMedia({ interaction, mediaUrl: userInput, pushToQueue: true });
     }
 
     if (isPlaylist) {
-      this.pushPlaylistToQueue({
+      await this.pushPlaylistToQueue({
         interaction,
         playlistUrl: userInput,
-        replyToInteraction: false,
+        replyToInteraction: hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
         this.playMedia({
@@ -81,21 +72,12 @@ export class DiscordInteractionService {
       urls: mediaUrl,
     });
     const { title } = await this.youtubeService.getVideoInfo(mediaUrl);
-    const forceReply = true;
-    this.displaySuccessMessage(
-      interaction,
-      `Added to queue: **${title}**`,
-      forceReply,
-    );
+    this.displaySuccessMessage({ interaction, successMessage: `Added to queue: **${title}**` });
 
-    const interactionReplyPayload =
-      await this.discordPlayerMessageService.getPlayerMessagePayload(
-        interaction.guild.id,
-      );
-    await this.discordPlayerMessageService.editOrCreate(
-      interaction,
-      interactionReplyPayload,
+    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
+      interaction.guild.id,
     );
+    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
     return;
   }
 
@@ -112,25 +94,18 @@ export class DiscordInteractionService {
       await this.playQueueService.pushToQueue({
         guildId: interaction.guild.id,
         urls: mediaUrl,
-        markAsPlayedByDefault: true,
       });
     }
-    this.discordAudioService.playAudio(interaction);
 
-    await this.discordPlayerMessageService.editOrCreate(
-      interaction,
-      'Loading details...',
-    );
-
-    const interactionReplyPayload =
-      await this.discordPlayerMessageService.getPlayerMessagePayload(
+    const onSuccess = async () => {
+      const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
         interaction.guild.id,
       );
 
-    await this.discordPlayerMessageService.editOrCreate(
-      interaction,
-      interactionReplyPayload,
-    );
+      await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
+    };
+
+    await this.discordAudioService.playAudio(interaction, onSuccess);
   }
 
   private async pushPlaylistToQueue({
@@ -142,42 +117,47 @@ export class DiscordInteractionService {
     playlistUrl: string;
     replyToInteraction: boolean;
   }): Promise<void> {
-    const { videosUrls, playlistTitle } =
-      await this.youtubeService.getPlaylistInfo(playlistUrl);
+    await interaction.reply('Loading details...');
+
+    const { videosUrls, playlistTitle } = await this.youtubeService.getPlaylistInfo(playlistUrl);
     this.playQueueService.pushToQueue({
       urls: videosUrls,
       guildId: interaction.guild.id,
     });
 
     if (replyToInteraction) {
-      const forceReply = true;
-      this.displaySuccessMessage(
+      this.displaySuccessMessage({
         interaction,
-        `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
-        forceReply,
-      );
+        successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
+        editPrevReply: true,
+      });
     }
   }
 
-  private async displaySuccessMessage(
-    interaction: ChatInputCommandInteraction,
-    successBody: string,
-    forceReply = false,
-  ): Promise<void> {
-    const addedToQueueEmbedMessage = new EmbedBuilder()
-      .setColor(0x57f287)
-      .setDescription(successBody);
+  private async displaySuccessMessage({
+    interaction,
+    successMessage,
+    editPrevReply = true,
+  }: {
+    interaction: ChatInputCommandInteraction;
+    successMessage: string;
+    editPrevReply?: boolean;
+  }): Promise<void> {
+    const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
 
     const payload = {
       embeds: [addedToQueueEmbedMessage],
     };
 
-    const message = forceReply
-      ? await interaction.reply(payload)
-      : await this.discordPlayerMessageService.editOrCreate(
-          interaction,
-          payload,
-        );
+    const createMessage = async () => {
+      if (editPrevReply) {
+        return await interaction.editReply(payload);
+      }
+
+      return await interaction.reply(payload);
+    };
+
+    const message = await createMessage();
 
     setTimeout(() => {
       message.delete();

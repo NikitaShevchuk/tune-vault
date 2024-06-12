@@ -37,9 +37,7 @@ export class YoutubeService {
     isVideo: boolean;
     isPlaylist: boolean;
   } {
-    const formattedInput = (
-      input.includes('music.') ? input : input.replaceAll('music.', '')
-    ).trim();
+    const formattedInput = (input.includes('music.') ? input : input.replaceAll('music.', '')).trim();
     const linkInfo = validateYtURL(formattedInput);
 
     const isVideo = linkInfo === 'video';
@@ -57,16 +55,10 @@ export class YoutubeService {
     currentlyPlayingVideoUrl: string,
     nextVideoUrl: string | undefined,
   ): Promise<EmbedBuilder> {
-    const currentlyPlayingVideoInfo = await this.getVideoInfo(
-      currentlyPlayingVideoUrl,
-    );
-    const nextVideoInfo = nextVideoUrl
-      ? await this.getVideoInfo(nextVideoUrl)
-      : null;
+    const currentlyPlayingVideoInfo = await this.getVideoInfo(currentlyPlayingVideoUrl);
+    const nextVideoInfo = nextVideoUrl ? await this.getVideoInfo(nextVideoUrl) : null;
     if (!currentlyPlayingVideoInfo) {
-      return new EmbedBuilder()
-        .setColor(0xff0000)
-        .setTitle('Failed to get video info');
+      return new EmbedBuilder().setColor(0xff0000).setTitle('Failed to get video info');
     }
 
     const thumbnail = currentlyPlayingVideoInfo.thumbnails.at(-1).url;
@@ -105,19 +97,15 @@ export class YoutubeService {
     }
   }
 
-  /**
-   * @returns the list of video URLs from the playlist
-   */
-  public async getPlaylistInfo(
-    playlistUrl: string,
-  ): Promise<{ videosUrls: string[]; playlistTitle: string }> {
-    const { all_videos, title } = await getPlaylistInfo(playlistUrl, {
+  public async getPlaylistInfo(playlistUrl: string): Promise<{ videosUrls: string[]; playlistTitle: string }> {
+    const playlist = await getPlaylistInfo(playlistUrl, {
       incomplete: true,
     });
-    const allVideosFromPlaylist = await all_videos();
+
+    const allVideosFromPlaylist = await playlist.all_videos();
 
     const videosUrls = allVideosFromPlaylist.map(({ url }) => url);
 
-    return { videosUrls, playlistTitle: title };
+    return { videosUrls, playlistTitle: playlist.title };
   }
 }

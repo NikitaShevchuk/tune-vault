@@ -11,9 +11,7 @@ export class PlayQueueService {
   constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
 
   public async getQueue(guildId: string): Promise<PlayQueueItem[] | null> {
-    const guildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(
-      PLAY_QUEUE_REDIS_KEY,
-    );
+    const guildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
 
     if (!guildsPlayQueues) {
       return null;
@@ -31,24 +29,15 @@ export class PlayQueueService {
     return queue.filter((item) => item.alreadyPlayed).at(-1);
   }
 
-  public async pushToQueue({
-    guildId,
-    urls,
-    markAsPlayedByDefault,
-  }: {
-    guildId: string;
-    urls: string[] | string;
-    markAsPlayedByDefault?: boolean;
-  }): Promise<void> {
-    const queueItems = (Array.isArray(urls) ? urls : [urls]).map<PlayQueueItem>(
-      (url) => ({ url, alreadyPlayed: Boolean(markAsPlayedByDefault) }),
-    );
+  public async pushToQueue({ guildId, urls }: { guildId: string; urls: string[] | string }): Promise<void> {
+    const queueItems = (Array.isArray(urls) ? urls : [urls]).map<PlayQueueItem>((url) => ({
+      url,
+      alreadyPlayed: false,
+    }));
 
     const existingQueue = await this.getQueue(guildId);
 
-    const updatedQueue = existingQueue
-      ? [...existingQueue, ...queueItems]
-      : queueItems;
+    const updatedQueue = existingQueue ? [...existingQueue, ...queueItems] : queueItems;
 
     await this.updateQueueForGuild(guildId, updatedQueue);
   }
@@ -68,9 +57,7 @@ export class PlayQueueService {
     const nextItemIndex = queue.findIndex((item) => !item.alreadyPlayed);
     const updatedQueue = queue.map((item, i) => ({
       ...item,
-      alreadyPlayed: markCurrentAsPlayed
-        ? i <= nextItemIndex
-        : i < nextItemIndex,
+      alreadyPlayed: markCurrentAsPlayed ? i <= nextItemIndex : i < nextItemIndex,
     }));
 
     const nextItem = queue[nextItemIndex];
@@ -81,8 +68,7 @@ export class PlayQueueService {
   }
 
   public async destroyQueue(guildId: string): Promise<void> {
-    const allGuildsPlayQueues =
-      await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
+    const allGuildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
 
     if (!allGuildsPlayQueues) {
       return;
@@ -93,12 +79,22 @@ export class PlayQueueService {
     await this.cacheManager.set(PLAY_QUEUE_REDIS_KEY, allGuildsPlayQueues);
   }
 
-  private async updateQueueForGuild(
-    guildId: string,
-    updatedQueue: PlayQueueItem[],
-  ): Promise<void> {
-    const allGuildsPlayQueues =
-      await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
+  public async markAsPlayed(guildId: string, url: string): Promise<void> {
+    const queue = await this.getQueue(guildId);
+    if (!queue) {
+      return;
+    }
+
+    const updatedQueue = queue.map((item) => ({
+      ...item,
+      alreadyPlayed: item.url === url || item.alreadyPlayed,
+    }));
+
+    await this.updateQueueForGuild(guildId, updatedQueue);
+  }
+
+  private async updateQueueForGuild(guildId: string, updatedQueue: PlayQueueItem[]): Promise<void> {
+    const allGuildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
 
     const updatedGuildsPlayQueues = {
       ...(allGuildsPlayQueues ?? {}),

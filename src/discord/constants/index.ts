@@ -1,8 +1,4 @@
-import {
-  ApplicationCommandOptionData,
-  ChatInputApplicationCommandData,
-  IntentsBitField,
-} from 'discord.js';
+import { ApplicationCommandOptionData, ChatInputApplicationCommandData, IntentsBitField } from 'discord.js';
 
 export enum Commands {
   PLAY = 'play',

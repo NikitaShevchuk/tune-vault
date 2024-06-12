@@ -9,11 +9,7 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
 } from '@discordjs/voice';
-import {
-  ChatInputCommandInteraction,
-  GuildMember,
-  Interaction,
-} from 'discord.js';
+import { ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 import { stream as streamFromYtLink } from 'play-dl';
 
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
@@ -28,15 +24,14 @@ export class DiscordAudioService {
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
   ) {}
 
-  public async playAudio(
-    interaction: ChatInputCommandInteraction,
-  ): Promise<void> {
+  public async playAudio(interaction: ChatInputCommandInteraction, onSuccess: () => void): Promise<void> {
     const connection = this.getConnection(interaction);
     const player = createAudioPlayer();
 
-    connection.on(VoiceConnectionStatus.Ready, () =>
-      this.onConnectionReady(interaction.guild.id, connection, player),
-    );
+    connection.on(VoiceConnectionStatus.Ready, async () => {
+      await this.onConnectionReady(interaction.guild.id, connection, player);
+      onSuccess();
+    });
 
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
@@ -75,14 +70,10 @@ export class DiscordAudioService {
       return;
     }
 
-    const interactionReplyPayload =
-      await this.discordPlayerMessageService.getPlayerMessagePayload(
-        interaction.guild.id,
-      );
-    await this.discordPlayerMessageService.editOrCreate(
-      interaction,
-      interactionReplyPayload,
+    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
+      interaction.guild.id,
     );
+    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
 
     const { stream } = await streamFromYtLink(nextItem.url, {
       discordPlayerCompatibility: true,
@@ -91,11 +82,7 @@ export class DiscordAudioService {
     player.play(resource);
   }
 
-  private async onConnectionReady(
-    guildId: string,
-    connection: VoiceConnection,
-    player: AudioPlayer,
-  ): Promise<void> {
+  private async onConnectionReady(guildId: string, connection: VoiceConnection, player: AudioPlayer): Promise<void> {
     try {
       const itemToPlay = await this.playQueueService.getNextItem({ guildId });
       if (!itemToPlay) {

@@ -1,15 +1,10 @@
-import {
-  CacheModuleAsyncOptions,
-  CacheModuleOptions,
-} from '@nestjs/cache-manager';
+import { CacheModuleAsyncOptions, CacheModuleOptions } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { redisStore } from 'cache-manager-redis-store';
 
 const TTL = 60 * 60 * 1000 * 3; // 3 hours
 
-export const redisOptions: CacheModuleOptions<
-  CacheModuleAsyncOptions<Record<string, any>>
-> = {
+export const redisOptions: CacheModuleOptions<CacheModuleAsyncOptions<Record<string, any>>> = {
   isGlobal: true,
   imports: [ConfigModule],
   useFactory: async (configService: ConfigService) => {
