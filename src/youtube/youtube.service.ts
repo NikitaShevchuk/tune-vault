@@ -54,33 +54,45 @@ export class YoutubeService {
   }
 
   public async getEmbedVideoInfoForDiscord(
-    videoUrl: string,
+    currentlyPlayingVideoUrl: string,
+    nextVideoUrl: string | undefined,
   ): Promise<EmbedBuilder> {
-    const videoInfo = await this.getVideoInfo(videoUrl);
-    if (!videoInfo) {
+    const currentlyPlayingVideoInfo = await this.getVideoInfo(
+      currentlyPlayingVideoUrl,
+    );
+    const nextVideoInfo = nextVideoUrl
+      ? await this.getVideoInfo(nextVideoUrl)
+      : null;
+    if (!currentlyPlayingVideoInfo) {
       return new EmbedBuilder()
         .setColor(0xff0000)
         .setTitle('Failed to get video info');
     }
 
-    const thumbnail = videoInfo.thumbnails.at(-1).url;
-    const authorThumbnail = videoInfo.channel.icons.at(-1).url;
-    const name = videoInfo.channel.name.includes(' - Topic')
-      ? videoInfo.channel.name.replace(' - Topic', '')
-      : videoInfo.channel.name;
+    const thumbnail = currentlyPlayingVideoInfo.thumbnails.at(-1).url;
+    const authorThumbnail = currentlyPlayingVideoInfo.channel.icons.at(-1).url;
+    const name = currentlyPlayingVideoInfo.channel.name.includes(' - Topic')
+      ? currentlyPlayingVideoInfo.channel.name.replace(' - Topic', '')
+      : currentlyPlayingVideoInfo.channel.name;
 
-    return new EmbedBuilder()
+    const payload = new EmbedBuilder()
       .setColor(0x0099ff)
       .setTitle(
-        `${videoInfo.title}  ▶︎ ${this.formatDuration(videoInfo.durationInSec)} •၊၊||။‌‌‌‌‌၊|•`,
+        `${currentlyPlayingVideoInfo.title}  ▶︎ ${this.formatDuration(currentlyPlayingVideoInfo.durationInSec)} •၊၊||။‌‌‌‌‌၊|•`,
       )
-      .setURL(videoInfo.url)
+      .setURL(currentlyPlayingVideoInfo.url)
       .setAuthor({
         name,
         iconURL: authorThumbnail,
-        url: videoInfo.channel.url,
+        url: currentlyPlayingVideoInfo.channel.url,
       })
       .setThumbnail(thumbnail);
+
+    if (nextVideoInfo) {
+      payload.setDescription(`Next  •  **${nextVideoInfo.title}**`);
+    }
+
+    return payload;
   }
 
   public async getVideoInfo(videoUrl: string): Promise<YouTubeVideo | null> {
@@ -96,12 +108,16 @@ export class YoutubeService {
   /**
    * @returns the list of video URLs from the playlist
    */
-  public async getPlaylistInfo(playlistUrl: string): Promise<string[]> {
-    const { all_videos } = await getPlaylistInfo(playlistUrl, {
+  public async getPlaylistInfo(
+    playlistUrl: string,
+  ): Promise<{ videosUrls: string[]; playlistTitle: string }> {
+    const { all_videos, title } = await getPlaylistInfo(playlistUrl, {
       incomplete: true,
     });
     const allVideosFromPlaylist = await all_videos();
 
-    return allVideosFromPlaylist.map(({ url }) => url);
+    const videosUrls = allVideosFromPlaylist.map(({ url }) => url);
+
+    return { videosUrls, playlistTitle: title };
   }
 }
