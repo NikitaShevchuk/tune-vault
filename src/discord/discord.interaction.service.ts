@@ -50,6 +50,7 @@ export class DiscordInteractionService {
       await this.pushPlaylistToQueue({
         interaction,
         playlistUrl: userInput,
+        hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
         this.playMedia({
@@ -119,11 +120,17 @@ export class DiscordInteractionService {
   private async pushPlaylistToQueue({
     interaction,
     playlistUrl,
+    hasItemsInQueue,
   }: {
     interaction: ChatInputCommandInteraction;
     playlistUrl: string;
+    hasItemsInQueue: boolean;
   }): Promise<void> {
-    await interaction.reply('Loading details...');
+    if (hasItemsInQueue) {
+      await interaction.reply('Loading playlist details...');
+    } else {
+      await this.discordPlayerMessageService.editOrCreate(interaction, 'Loading playlist details...');
+    }
 
     const { videosUrls, playlistTitle } = await this.youtubeService.getPlaylistInfo(playlistUrl);
     await this.playQueueService.pushToQueue({
@@ -131,10 +138,11 @@ export class DiscordInteractionService {
       guildId: interaction.guild.id,
     });
 
-    this.displaySuccessMessage({
+    await this.displaySuccessMessage({
       interaction,
       successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
       editPrevReply: true,
+      shouldDeleteAfterDelay: hasItemsInQueue,
     });
   }
 
@@ -142,10 +150,12 @@ export class DiscordInteractionService {
     interaction,
     successMessage,
     editPrevReply = true,
+    shouldDeleteAfterDelay = true,
   }: {
     interaction: ChatInputCommandInteraction;
     successMessage: string;
     editPrevReply?: boolean;
+    shouldDeleteAfterDelay?: boolean;
   }): Promise<void> {
     const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
     const payload = {
@@ -154,9 +164,11 @@ export class DiscordInteractionService {
 
     try {
       const message = editPrevReply ? await interaction.editReply(payload) : await interaction.reply(payload);
-      setTimeout(() => {
-        message.delete();
-      }, INTERACTION_REPLY_TIMEOUT);
+      if (shouldDeleteAfterDelay) {
+        setTimeout(() => {
+          message.delete();
+        }, INTERACTION_REPLY_TIMEOUT);
+      }
     } catch (error) {
       this.logger.error('Failed to send message', error);
     }
