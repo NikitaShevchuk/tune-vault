@@ -4,6 +4,7 @@ import { Cache } from 'cache-manager';
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonInteraction,
   ButtonStyle,
   CommandInteraction,
   InteractionReplyOptions,
@@ -30,7 +31,7 @@ export class DiscordPlayerMessageService {
   ) {}
 
   public async editOrCreate(
-    interaction: CommandInteraction,
+    interaction: CommandInteraction | ButtonInteraction,
     message: string | InteractionReplyOptions | MessagePayload,
   ): Promise<Message | null> {
     const playerMessageId = await this.get(interaction.guild.id);
@@ -106,7 +107,7 @@ export class DiscordPlayerMessageService {
   }
 
   private async editExistingMessage(
-    interaction: CommandInteraction,
+    interaction: CommandInteraction | ButtonInteraction,
     message: string | InteractionReplyOptions | MessagePayload,
     playerMessageId: string,
   ): Promise<Message | null> {
@@ -124,7 +125,7 @@ export class DiscordPlayerMessageService {
   }
 
   private async replyToInteractionAndSaveMessageId(
-    interaction: CommandInteraction,
+    interaction: CommandInteraction | ButtonInteraction,
     message: string | InteractionReplyOptions | MessagePayload,
   ): Promise<Message | null> {
     try {

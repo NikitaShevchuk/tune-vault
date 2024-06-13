@@ -41,3 +41,5 @@ export enum ButtonIds {
   NEXT = 'next',
   DISCONNECT = 'disconnect',
 }
+
+export const INTERACTION_REPLY_TIMEOUT = 5_000;

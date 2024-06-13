@@ -9,15 +9,20 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
 } from '@discordjs/voice';
-import { ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
+import { ButtonInteraction, ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 import { stream as streamFromYtLink } from 'play-dl';
 
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { INTERACTION_REPLY_TIMEOUT } from 'src/discord/constants';
 
 @Injectable()
 export class DiscordAudioService {
   private readonly logger = new Logger(DiscordAudioService.name);
+
+  // It's the only known way to interact with the audio player
+  // Because we can't pass the player instance to the interaction handler
+  private readonly playerByGuildId = new Map<string, AudioPlayer>();
 
   constructor(
     private readonly playQueueService: PlayQueueService,
@@ -27,6 +32,7 @@ export class DiscordAudioService {
   public async playAudio(interaction: ChatInputCommandInteraction, onSuccess: () => void): Promise<void> {
     const connection = this.getConnection(interaction);
     const player = createAudioPlayer();
+    this.playerByGuildId.set(interaction.guild.id, player);
 
     connection.on(VoiceConnectionStatus.Ready, async () => {
       await this.onConnectionReady(interaction.guild.id, connection, player);
@@ -35,7 +41,7 @@ export class DiscordAudioService {
 
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
-        await this.onAudioPlayerIdle(interaction, connection, player);
+        await this.onAudioPlayerIdle(interaction, connection);
       }
     });
 
@@ -54,10 +60,32 @@ export class DiscordAudioService {
     });
   }
 
+  public pauseOrPlayAudio(interaction: ButtonInteraction): void {
+    const player = this.playerByGuildId.get(interaction.guild.id);
+    if (!player) {
+      return;
+    }
+
+    if (player.state.status === AudioPlayerStatus.Paused) {
+      player.unpause();
+      interaction.reply('▶️ Resumed');
+      setTimeout(() => {
+        interaction.deleteReply();
+      }, INTERACTION_REPLY_TIMEOUT);
+
+      return;
+    }
+
+    player.pause();
+    interaction.reply('⏸️ Paused');
+    setTimeout(() => {
+      interaction.deleteReply();
+    }, INTERACTION_REPLY_TIMEOUT);
+  }
+
   private async onAudioPlayerIdle(
     interaction: ChatInputCommandInteraction,
     connection: VoiceConnection,
-    player: AudioPlayer,
   ): Promise<void> {
     const nextItem = await this.playQueueService.getNextItem({
       guildId: interaction.guild.id,
@@ -70,6 +98,39 @@ export class DiscordAudioService {
       return;
     }
 
+    await this.playNextTrack({ interaction });
+  }
+
+  public async playNextTrack({
+    interaction,
+    stopCurrent,
+    replyToInteraction,
+  }: {
+    interaction: ButtonInteraction | ChatInputCommandInteraction;
+    stopCurrent?: boolean;
+    replyToInteraction?: boolean;
+  }): Promise<void> {
+    const player = this.playerByGuildId.get(interaction.guild.id);
+    const nextItem = await this.playQueueService.getNextItem({
+      guildId: interaction.guild.id,
+    });
+    if (!player || !nextItem) {
+      if (replyToInteraction) {
+        interaction.reply('No items in the queue');
+        setTimeout(() => {
+          interaction.deleteReply();
+        }, INTERACTION_REPLY_TIMEOUT);
+      }
+      return;
+    }
+
+    if (replyToInteraction) {
+      interaction.reply('Playing next track');
+      setTimeout(() => {
+        interaction.deleteReply();
+      }, INTERACTION_REPLY_TIMEOUT);
+    }
+
     const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
       interaction.guild.id,
     );
@@ -79,6 +140,42 @@ export class DiscordAudioService {
       discordPlayerCompatibility: true,
     });
     const resource = createAudioResource(stream);
+
+    if (stopCurrent) {
+      player.stop();
+    }
+    player.stop();
+    player.play(resource);
+  }
+
+  public async playPrevTrack(interaction: ButtonInteraction): Promise<void> {
+    const player = this.playerByGuildId.get(interaction.guild.id);
+    const prevItem = await this.playQueueService.getPrevItem(interaction.guild.id);
+
+    if (!player || !prevItem) {
+      interaction.reply('No items in the queue');
+      setTimeout(() => {
+        interaction.deleteReply();
+      }, INTERACTION_REPLY_TIMEOUT);
+      return;
+    }
+
+    interaction.reply('Playing previous track');
+    setTimeout(() => {
+      interaction.deleteReply();
+    }, INTERACTION_REPLY_TIMEOUT);
+
+    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
+      interaction.guild.id,
+    );
+    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
+
+    const { stream } = await streamFromYtLink(prevItem.url, {
+      discordPlayerCompatibility: true,
+    });
+    const resource = createAudioResource(stream);
+
+    player.stop();
     player.play(resource);
   }
 

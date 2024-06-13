@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChatInputCommandInteraction, EmbedBuilder, GuildMember } from 'discord.js';
+import { ButtonInteraction, ChatInputCommandInteraction, EmbedBuilder, GuildMember } from 'discord.js';
+import { getVoiceConnection } from '@discordjs/voice';
 
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordAudioService } from 'src/discord/discord.audio.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { INTERACTION_REPLY_TIMEOUT } from 'src/discord/constants';
 
 @Injectable()
 export class DiscordInteractionService {
@@ -48,7 +50,6 @@ export class DiscordInteractionService {
       await this.pushPlaylistToQueue({
         interaction,
         playlistUrl: userInput,
-        replyToInteraction: hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
         this.playMedia({
@@ -58,6 +59,14 @@ export class DiscordInteractionService {
         });
       }
     }
+  }
+
+  public disconnectVoiceChannel(interaction: ButtonInteraction): void {
+    const connection = getVoiceConnection(interaction.guild.id);
+    connection?.destroy();
+    interaction.reply('Disconnected');
+    this.playQueueService.destroyQueue(interaction.guild.id);
+    this.discordPlayerMessageService.delete(interaction.guild.id);
   }
 
   private async pushSingleItemToQueue({
@@ -72,7 +81,7 @@ export class DiscordInteractionService {
       urls: mediaUrl,
     });
     const { title } = await this.youtubeService.getVideoInfo(mediaUrl);
-    this.displaySuccessMessage({ interaction, successMessage: `Added to queue: **${title}**` });
+    this.displaySuccessMessage({ interaction, successMessage: `Added to queue: **${title}**`, editPrevReply: false });
 
     const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
       interaction.guild.id,
@@ -101,7 +110,6 @@ export class DiscordInteractionService {
       const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
         interaction.guild.id,
       );
-
       await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
     };
 
@@ -111,27 +119,23 @@ export class DiscordInteractionService {
   private async pushPlaylistToQueue({
     interaction,
     playlistUrl,
-    replyToInteraction,
   }: {
     interaction: ChatInputCommandInteraction;
     playlistUrl: string;
-    replyToInteraction: boolean;
   }): Promise<void> {
     await interaction.reply('Loading details...');
 
     const { videosUrls, playlistTitle } = await this.youtubeService.getPlaylistInfo(playlistUrl);
-    this.playQueueService.pushToQueue({
+    await this.playQueueService.pushToQueue({
       urls: videosUrls,
       guildId: interaction.guild.id,
     });
 
-    if (replyToInteraction) {
-      this.displaySuccessMessage({
-        interaction,
-        successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
-        editPrevReply: true,
-      });
-    }
+    this.displaySuccessMessage({
+      interaction,
+      successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
+      editPrevReply: true,
+    });
   }
 
   private async displaySuccessMessage({
@@ -144,23 +148,17 @@ export class DiscordInteractionService {
     editPrevReply?: boolean;
   }): Promise<void> {
     const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
-
     const payload = {
       embeds: [addedToQueueEmbedMessage],
     };
 
-    const createMessage = async () => {
-      if (editPrevReply) {
-        return await interaction.editReply(payload);
-      }
-
-      return await interaction.reply(payload);
-    };
-
-    const message = await createMessage();
-
-    setTimeout(() => {
-      message.delete();
-    }, 5_000);
+    try {
+      const message = editPrevReply ? await interaction.editReply(payload) : await interaction.reply(payload);
+      setTimeout(() => {
+        message.delete();
+      }, INTERACTION_REPLY_TIMEOUT);
+    } catch (error) {
+      this.logger.error('Failed to send message', error);
+    }
   }
 }
