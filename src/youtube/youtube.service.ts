@@ -6,6 +6,7 @@ import {
   video_info as getVideoInfo,
   playlist_info as getPlaylistInfo,
   YouTubeVideo,
+  search as ytSearch,
 } from 'play-dl';
 
 @Injectable()
@@ -36,6 +37,7 @@ export class YoutubeService {
     isValid: boolean;
     isVideo: boolean;
     isPlaylist: boolean;
+    isYouTubeLink: boolean;
   } {
     const formattedInput = (input.includes('music.') ? input : input.replaceAll('music.', '')).trim();
     const linkInfo = validateYtURL(formattedInput);
@@ -43,11 +45,13 @@ export class YoutubeService {
     const isVideo = linkInfo === 'video';
     const isPlaylist = linkInfo === 'playlist';
     const isValid = isVideo || isPlaylist;
+    const isYouTubeLink = input?.includes('youtube.com');
 
     return {
       isValid,
       isVideo,
       isPlaylist,
+      isYouTubeLink,
     };
   }
 
@@ -97,15 +101,30 @@ export class YoutubeService {
     }
   }
 
-  public async getPlaylistInfo(playlistUrl: string): Promise<{ videosUrls: string[]; playlistTitle: string }> {
-    const playlist = await getPlaylistInfo(playlistUrl, {
-      incomplete: true,
-    });
+  public async getPlaylistInfo(playlistUrl: string): Promise<{ videosUrls: string[]; playlistTitle: string } | null> {
+    try {
+      const playlist = await getPlaylistInfo(playlistUrl, {
+        incomplete: true,
+      });
 
-    const allVideosFromPlaylist = await playlist.all_videos();
+      const allVideosFromPlaylist = await playlist.all_videos();
 
-    const videosUrls = allVideosFromPlaylist.map(({ url }) => url);
+      const videosUrls = allVideosFromPlaylist.map(({ url }) => url);
 
-    return { videosUrls, playlistTitle: playlist.title };
+      return { videosUrls, playlistTitle: playlist.title };
+    } catch (e) {
+      this.logger.error('Failed to get playlist info', e);
+      return null;
+    }
+  }
+
+  public async search(query: string): Promise<YouTubeVideo | null> {
+    try {
+      const results = await ytSearch(query, { limit: 1 });
+      return results?.[0] ?? null;
+    } catch (e) {
+      this.logger.error(`Failed to search for: ${query}`, e);
+      return null;
+    }
   }
 }

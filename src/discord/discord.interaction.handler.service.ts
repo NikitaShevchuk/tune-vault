@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ButtonInteraction, ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 import { getVoiceConnection } from '@discordjs/voice';
 
@@ -11,6 +11,8 @@ import { ButtonIds, Commands, commands } from 'src/discord/constants';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
+  private readonly logger = new Logger(DiscordInteractionHandlerService.name);
+
   constructor(
     private readonly youtubeService: YoutubeService,
     private readonly playQueueService: PlayQueueService,
@@ -47,7 +49,7 @@ export class DiscordInteractionHandlerService {
 
     const isUnknownCommand = !commands.find(({ name }) => name === interaction.commandName);
     if (isUnknownCommand) {
-      interaction.reply('Command not found');
+      this.discordInteractionHelperService.replyAndDeleteAfterDelay({ interaction, message: 'Command not found' });
       return;
     }
 
@@ -60,39 +62,29 @@ export class DiscordInteractionHandlerService {
     }
   }
 
-  public async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  private async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     const userInput = interaction.options.getString('link');
 
     if (!(interaction.member as GuildMember).voice.channel) {
-      await interaction.reply('⛔ You must be in a voice channel to use this command');
-      return;
-    }
-
-    const { isValid, isVideo, isPlaylist } = this.youtubeService.validateAndGetLinkInfo(userInput);
-
-    if (!isValid) {
-      await interaction.reply('⛔ Invalid link');
-      return;
-    }
-
-    await this.discordPlayerMessageService.editOrCreate(interaction, 'Loading details...');
-
-    const hasItemsInQueue = Boolean(await this.playQueueService.getQueue(interaction.guild.id));
-
-    if (hasItemsInQueue && !isPlaylist) {
-      await this.pushSingleItemToQueue({ interaction, mediaUrl: userInput });
-    }
-
-    if (!hasItemsInQueue && isVideo) {
-      await this.playQueueService.pushToQueue({
-        guildId: interaction.guild.id,
-        urls: userInput,
+      await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+        interaction,
+        message: '⛔ You must be in a voice channel to use this command',
       });
-
-      await this.discordAudioService.playAudio(interaction, () =>
-        this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction),
-      );
+      return;
     }
+
+    const { isValid, isPlaylist, isYouTubeLink } = this.youtubeService.validateAndGetLinkInfo(userInput);
+
+    if (isYouTubeLink && !isValid) {
+      await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+        interaction,
+        message: '⛔ Invalid link',
+      });
+      return;
+    }
+
+    await this.discordPlayerMessageService.editOrSend(interaction, 'Loading details...');
+    const hasItemsInQueue = Boolean(await this.playQueueService.getQueue(interaction.guild.id));
 
     if (isPlaylist) {
       await this.pushPlaylistToQueue({
@@ -101,17 +93,72 @@ export class DiscordInteractionHandlerService {
         hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
-        await this.discordAudioService.playAudio(interaction, () =>
-          this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction),
-        );
+        await this.discordAudioService.playAudio({
+          interaction,
+          onSuccess: () => this.discordPlayerMessageService.sendCurrentTrackDetails(interaction),
+        });
       }
+      return;
     }
+
+    if (isYouTubeLink) {
+      this.pushToQueueAndPlayIfQueueWasEmpty({
+        hasItemsInQueue,
+        interaction,
+        mediaUrl: userInput,
+      });
+
+      return;
+    }
+
+    const searchResult = await this.youtubeService.search(userInput);
+    if (!searchResult) {
+      await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+        interaction,
+        message: '⛔ No results found',
+      });
+      return;
+    }
+
+    this.pushToQueueAndPlayIfQueueWasEmpty({
+      hasItemsInQueue,
+      interaction,
+      mediaUrl: searchResult.url,
+    });
   }
 
-  public disconnectFromVoiceChannel(interaction: ButtonInteraction): void {
+  private async pushToQueueAndPlayIfQueueWasEmpty({
+    hasItemsInQueue,
+    interaction,
+    mediaUrl,
+  }: {
+    hasItemsInQueue: boolean;
+    interaction: ChatInputCommandInteraction;
+    mediaUrl: string;
+  }): Promise<void> {
+    if (hasItemsInQueue) {
+      await this.pushSingleItemToQueue({ interaction, mediaUrl });
+      return;
+    }
+
+    await this.playQueueService.pushToQueue({
+      guildId: interaction.guild.id,
+      urls: mediaUrl,
+    });
+    await this.discordAudioService.playAudio({
+      interaction,
+      onSuccess: () => this.discordPlayerMessageService.sendCurrentTrackDetails(interaction),
+    });
+    return;
+  }
+
+  private disconnectFromVoiceChannel(interaction: ButtonInteraction): void {
     const connection = getVoiceConnection(interaction.guild.id);
     connection?.destroy();
-    interaction.reply('Disconnected');
+    this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+      interaction,
+      message: 'Disconnected from the voice channel',
+    });
     this.playQueueService.destroyQueue(interaction.guild.id);
     this.discordPlayerMessageService.delete(interaction.guild.id);
   }
@@ -131,10 +178,9 @@ export class DiscordInteractionHandlerService {
     this.discordInteractionHelperService.displaySuccessMessage({
       interaction,
       successMessage: `Added to queue: **${title}**`,
-      editPrevReply: false,
     });
 
-    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
+    await this.discordPlayerMessageService.sendCurrentTrackDetails(interaction);
     return;
   }
 
@@ -148,12 +194,21 @@ export class DiscordInteractionHandlerService {
     hasItemsInQueue: boolean;
   }): Promise<void> {
     if (hasItemsInQueue) {
-      await interaction.reply('Loading playlist details...');
+      try {
+        await interaction.reply('Loading playlist details...');
+      } catch (e) {
+        this.logger.error('Failed to reply to an interaction', e);
+      }
     } else {
-      await this.discordPlayerMessageService.editOrCreate(interaction, 'Loading playlist details...');
+      await this.discordPlayerMessageService.editOrSend(interaction, 'Loading playlist details...');
     }
 
-    const { videosUrls, playlistTitle } = await this.youtubeService.getPlaylistInfo(playlistUrl);
+    const playlistInfo = await this.youtubeService.getPlaylistInfo(playlistUrl);
+    if (!playlistInfo) {
+      return;
+    }
+    const { videosUrls, playlistTitle } = playlistInfo;
+
     await this.playQueueService.pushToQueue({
       urls: videosUrls,
       guildId: interaction.guild.id,
@@ -162,7 +217,6 @@ export class DiscordInteractionHandlerService {
     await this.discordInteractionHelperService.displaySuccessMessage({
       interaction,
       successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
-      editPrevReply: true,
       shouldDeleteAfterDelay: hasItemsInQueue,
     });
   }

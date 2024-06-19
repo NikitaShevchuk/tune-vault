@@ -30,7 +30,13 @@ export class DiscordAudioService {
     private readonly discordInteractionHelperService: DiscordInteractionHelperService,
   ) {}
 
-  public async playAudio(interaction: ChatInputCommandInteraction, onSuccess: () => void): Promise<void> {
+  public async playAudio({
+    interaction,
+    onSuccess,
+  }: {
+    interaction: ChatInputCommandInteraction;
+    onSuccess: () => void;
+  }): Promise<void> {
     const connection = this.getConnection(interaction);
     const player = createAudioPlayer();
     this.playerByGuildId.set(interaction.guild.id, player);
@@ -122,7 +128,7 @@ export class DiscordAudioService {
       this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: 'Playing next track', interaction });
     }
 
-    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
+    await this.discordPlayerMessageService.sendCurrentTrackDetails(interaction);
 
     const { stream } = await streamFromYtLink(nextItem.url, {
       discordPlayerCompatibility: true,
@@ -147,7 +153,7 @@ export class DiscordAudioService {
 
     this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: 'Playing previous track', interaction });
 
-    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
+    await this.discordPlayerMessageService.sendCurrentTrackDetails(interaction);
 
     const { stream } = await streamFromYtLink(prevItem.url, {
       discordPlayerCompatibility: true,

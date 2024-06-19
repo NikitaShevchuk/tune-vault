@@ -10,12 +10,10 @@ export class DiscordInteractionHelperService {
   public async displaySuccessMessage({
     interaction,
     successMessage,
-    editPrevReply = true,
     shouldDeleteAfterDelay = true,
   }: {
     interaction: ChatInputCommandInteraction;
     successMessage: string;
-    editPrevReply?: boolean;
     shouldDeleteAfterDelay?: boolean;
   }): Promise<void> {
     const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
@@ -24,7 +22,7 @@ export class DiscordInteractionHelperService {
     };
 
     try {
-      const message = editPrevReply ? await interaction.editReply(payload) : await interaction.reply(payload);
+      const message = interaction.replied ? await interaction.editReply(payload) : await interaction.reply(payload);
       if (shouldDeleteAfterDelay) {
         setTimeout(() => {
           message.delete();
@@ -44,7 +42,15 @@ export class DiscordInteractionHelperService {
     message: string | InteractionReplyOptions;
     delayMs?: number;
   }): Promise<void> {
-    await interaction.reply(message);
-    setTimeout(interaction.deleteReply, delayMs);
+    try {
+      if (interaction.replied) {
+        await interaction.editReply(message);
+      } else {
+        await interaction.reply(message);
+      }
+      setTimeout(() => interaction.deleteReply(), delayMs);
+    } catch (e) {
+      this.logger.error('Failed to reply to an interaction', e);
+    }
   }
 }
