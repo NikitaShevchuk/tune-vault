@@ -1,23 +1,64 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ButtonInteraction, ChatInputCommandInteraction, EmbedBuilder, GuildMember } from 'discord.js';
+import { Injectable } from '@nestjs/common';
+import { ButtonInteraction, ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 import { getVoiceConnection } from '@discordjs/voice';
 
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordAudioService } from 'src/discord/discord.audio.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
-import { INTERACTION_REPLY_TIMEOUT } from 'src/discord/constants';
+import { DiscordInteractionHelperService } from 'src/discord/discord.interaction.helper.service';
+import { ButtonIds, Commands, commands } from 'src/discord/constants';
 
 @Injectable()
-export class DiscordInteractionService {
-  private readonly logger = new Logger(DiscordInteractionService.name);
-
+export class DiscordInteractionHandlerService {
   constructor(
     private readonly youtubeService: YoutubeService,
     private readonly playQueueService: PlayQueueService,
     private readonly discordAudioService: DiscordAudioService,
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
+    private readonly discordInteractionHelperService: DiscordInteractionHelperService,
   ) {}
+
+  public handleButtonInteraction(interaction: Interaction): void {
+    if (!interaction.isButton()) {
+      return;
+    }
+
+    const buttonId = interaction.customId;
+
+    if (buttonId === ButtonIds.PREVIOUS) {
+      this.discordAudioService.playPrevTrack(interaction);
+    }
+    if (buttonId === ButtonIds.PLAY_PAUSE) {
+      this.discordAudioService.pauseOrPlayAudio(interaction);
+    }
+    if (buttonId === ButtonIds.NEXT) {
+      this.discordAudioService.playNextTrack({ interaction, stopCurrent: true, replyToInteraction: true });
+    }
+    if (buttonId === ButtonIds.DISCONNECT) {
+      this.disconnectFromVoiceChannel(interaction);
+    }
+  }
+
+  public async handleCommandInteraction(interaction: Interaction): Promise<void> {
+    if (!interaction.isChatInputCommand()) {
+      return;
+    }
+
+    const isUnknownCommand = !commands.find(({ name }) => name === interaction.commandName);
+    if (isUnknownCommand) {
+      interaction.reply('Command not found');
+      return;
+    }
+
+    if (interaction.commandName === Commands.REFRESH_COMMANDS) {
+      interaction.guild.commands.set(commands);
+    }
+
+    if ([Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)) {
+      this.handlePlayCommand(interaction);
+    }
+  }
 
   public async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     const userInput = interaction.options.getString('link');
@@ -43,7 +84,14 @@ export class DiscordInteractionService {
     }
 
     if (!hasItemsInQueue && isVideo) {
-      await this.playMedia({ interaction, mediaUrl: userInput, pushToQueue: true });
+      await this.playQueueService.pushToQueue({
+        guildId: interaction.guild.id,
+        urls: userInput,
+      });
+
+      await this.discordAudioService.playAudio(interaction, () =>
+        this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction),
+      );
     }
 
     if (isPlaylist) {
@@ -53,16 +101,14 @@ export class DiscordInteractionService {
         hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
-        this.playMedia({
-          interaction,
-          mediaUrl: userInput,
-          pushToQueue: false,
-        });
+        await this.discordAudioService.playAudio(interaction, () =>
+          this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction),
+        );
       }
     }
   }
 
-  public disconnectVoiceChannel(interaction: ButtonInteraction): void {
+  public disconnectFromVoiceChannel(interaction: ButtonInteraction): void {
     const connection = getVoiceConnection(interaction.guild.id);
     connection?.destroy();
     interaction.reply('Disconnected');
@@ -82,39 +128,14 @@ export class DiscordInteractionService {
       urls: mediaUrl,
     });
     const { title } = await this.youtubeService.getVideoInfo(mediaUrl);
-    this.displaySuccessMessage({ interaction, successMessage: `Added to queue: **${title}**`, editPrevReply: false });
+    this.discordInteractionHelperService.displaySuccessMessage({
+      interaction,
+      successMessage: `Added to queue: **${title}**`,
+      editPrevReply: false,
+    });
 
-    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
-      interaction.guild.id,
-    );
-    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
+    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
     return;
-  }
-
-  private async playMedia({
-    interaction,
-    mediaUrl,
-    pushToQueue,
-  }: {
-    interaction: ChatInputCommandInteraction;
-    mediaUrl: string;
-    pushToQueue: boolean;
-  }): Promise<void> {
-    if (pushToQueue) {
-      await this.playQueueService.pushToQueue({
-        guildId: interaction.guild.id,
-        urls: mediaUrl,
-      });
-    }
-
-    const onSuccess = async () => {
-      const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
-        interaction.guild.id,
-      );
-      await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
-    };
-
-    await this.discordAudioService.playAudio(interaction, onSuccess);
   }
 
   private async pushPlaylistToQueue({
@@ -138,39 +159,11 @@ export class DiscordInteractionService {
       guildId: interaction.guild.id,
     });
 
-    await this.displaySuccessMessage({
+    await this.discordInteractionHelperService.displaySuccessMessage({
       interaction,
       successMessage: `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`,
       editPrevReply: true,
       shouldDeleteAfterDelay: hasItemsInQueue,
     });
-  }
-
-  private async displaySuccessMessage({
-    interaction,
-    successMessage,
-    editPrevReply = true,
-    shouldDeleteAfterDelay = true,
-  }: {
-    interaction: ChatInputCommandInteraction;
-    successMessage: string;
-    editPrevReply?: boolean;
-    shouldDeleteAfterDelay?: boolean;
-  }): Promise<void> {
-    const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
-    const payload = {
-      embeds: [addedToQueueEmbedMessage],
-    };
-
-    try {
-      const message = editPrevReply ? await interaction.editReply(payload) : await interaction.reply(payload);
-      if (shouldDeleteAfterDelay) {
-        setTimeout(() => {
-          message.delete();
-        }, INTERACTION_REPLY_TIMEOUT);
-      }
-    } catch (error) {
-      this.logger.error('Failed to send message', error);
-    }
   }
 }

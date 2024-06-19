@@ -14,7 +14,7 @@ import { stream as streamFromYtLink } from 'play-dl';
 
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
-import { INTERACTION_REPLY_TIMEOUT } from 'src/discord/constants';
+import { DiscordInteractionHelperService } from 'src/discord/discord.interaction.helper.service';
 
 @Injectable()
 export class DiscordAudioService {
@@ -27,6 +27,7 @@ export class DiscordAudioService {
   constructor(
     private readonly playQueueService: PlayQueueService,
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
+    private readonly discordInteractionHelperService: DiscordInteractionHelperService,
   ) {}
 
   public async playAudio(interaction: ChatInputCommandInteraction, onSuccess: () => void): Promise<void> {
@@ -68,19 +69,12 @@ export class DiscordAudioService {
 
     if (player.state.status === AudioPlayerStatus.Paused) {
       player.unpause();
-      interaction.reply('▶️ Resumed');
-      setTimeout(() => {
-        interaction.deleteReply();
-      }, INTERACTION_REPLY_TIMEOUT);
-
+      this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: '▶️ Resumed', interaction });
       return;
     }
 
     player.pause();
-    interaction.reply('⏸️ Paused');
-    setTimeout(() => {
-      interaction.deleteReply();
-    }, INTERACTION_REPLY_TIMEOUT);
+    this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: '⏸️ Paused', interaction });
   }
 
   private async onAudioPlayerIdle(
@@ -116,25 +110,19 @@ export class DiscordAudioService {
     });
     if (!player || !nextItem) {
       if (replyToInteraction) {
-        interaction.reply('No items in the queue');
-        setTimeout(() => {
-          interaction.deleteReply();
-        }, INTERACTION_REPLY_TIMEOUT);
+        this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+          message: 'No items in the queue',
+          interaction,
+        });
       }
       return;
     }
 
     if (replyToInteraction) {
-      interaction.reply('Playing next track');
-      setTimeout(() => {
-        interaction.deleteReply();
-      }, INTERACTION_REPLY_TIMEOUT);
+      this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: 'Playing next track', interaction });
     }
 
-    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
-      interaction.guild.id,
-    );
-    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
+    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
 
     const { stream } = await streamFromYtLink(nextItem.url, {
       discordPlayerCompatibility: true,
@@ -153,22 +141,13 @@ export class DiscordAudioService {
     const prevItem = await this.playQueueService.getPrevItem(interaction.guild.id);
 
     if (!player || !prevItem) {
-      interaction.reply('No items in the queue');
-      setTimeout(() => {
-        interaction.deleteReply();
-      }, INTERACTION_REPLY_TIMEOUT);
+      this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: 'No items in the queue', interaction });
       return;
     }
 
-    interaction.reply('Playing previous track');
-    setTimeout(() => {
-      interaction.deleteReply();
-    }, INTERACTION_REPLY_TIMEOUT);
+    this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: 'Playing previous track', interaction });
 
-    const interactionReplyPayload = await this.discordPlayerMessageService.getPlayerMessagePayload(
-      interaction.guild.id,
-    );
-    await this.discordPlayerMessageService.editOrCreate(interaction, interactionReplyPayload);
+    await this.discordPlayerMessageService.sendOrEditPlayerMessage(interaction);
 
     const { stream } = await streamFromYtLink(prevItem.url, {
       discordPlayerCompatibility: true,

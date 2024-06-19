@@ -13,12 +13,12 @@ export const playCommandOptions: ApplicationCommandOptionData[] = [
 export const commands: ChatInputApplicationCommandData[] = [
   {
     name: Commands.PLAY,
-    description: 'Plays music from a link',
+    description: 'Plays music from a link or performs a search based on a query',
     options: playCommandOptions,
   },
   {
     name: Commands.P,
-    description: 'Plays music from a link. Shortcut for the /play command',
+    description: 'Shortcut for the /play command',
     options: playCommandOptions,
   },
   {
@@ -42,4 +42,4 @@ export enum ButtonIds {
   DISCONNECT = 'disconnect',
 }
 
-export const INTERACTION_REPLY_TIMEOUT = 5_000;
+export const INTERACTION_REPLY_TIMEOUT_MS = 5_000;

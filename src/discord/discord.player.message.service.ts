@@ -30,6 +30,11 @@ export class DiscordPlayerMessageService {
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
+  public async sendOrEditPlayerMessage(interaction: CommandInteraction | ButtonInteraction): Promise<void> {
+    const interactionReplyPayload = await this.getPlayerMessagePayload(interaction.guild.id);
+    await this.editOrCreate(interaction, interactionReplyPayload);
+  }
+
   public async editOrCreate(
     interaction: CommandInteraction | ButtonInteraction,
     message: string | InteractionReplyOptions | MessagePayload,
