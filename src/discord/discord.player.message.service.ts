@@ -155,7 +155,7 @@ export class DiscordPlayerMessageService {
     return null;
   }
 
-  private async get(guildId: string): Promise<string | null> {
+  public async get(guildId: string): Promise<string | null> {
     const playerMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
 
     if (playerMessagesIds && playerMessagesIds[guildId]) {

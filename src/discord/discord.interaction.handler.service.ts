@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ButtonInteraction, ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
-import { getVoiceConnection } from '@discordjs/voice';
+import { ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
@@ -38,7 +37,7 @@ export class DiscordInteractionHandlerService {
       this.discordAudioService.playNextTrack({ interaction, stopCurrent: true, replyToInteraction: true });
     }
     if (buttonId === ButtonIds.DISCONNECT) {
-      this.disconnectFromVoiceChannel(interaction);
+      this.discordAudioService.disconnectFromVoiceChannel(interaction);
     }
   }
 
@@ -150,17 +149,6 @@ export class DiscordInteractionHandlerService {
       onSuccess: () => this.discordPlayerMessageService.sendCurrentTrackDetails(interaction),
     });
     return;
-  }
-
-  private disconnectFromVoiceChannel(interaction: ButtonInteraction): void {
-    const connection = getVoiceConnection(interaction.guild.id);
-    connection?.destroy();
-    this.discordInteractionHelperService.replyAndDeleteAfterDelay({
-      interaction,
-      message: 'Disconnected from the voice channel',
-    });
-    this.playQueueService.destroyQueue(interaction.guild.id);
-    this.discordPlayerMessageService.delete(interaction.guild.id);
   }
 
   private async pushSingleItemToQueue({

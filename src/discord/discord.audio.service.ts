@@ -48,7 +48,7 @@ export class DiscordAudioService {
 
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
-        await this.onAudioPlayerIdle(interaction, connection);
+        await this.onAudioPlayerIdle(interaction);
       }
     });
 
@@ -83,22 +83,37 @@ export class DiscordAudioService {
     this.discordInteractionHelperService.replyAndDeleteAfterDelay({ message: '⏸️ Paused', interaction });
   }
 
-  private async onAudioPlayerIdle(
-    interaction: ChatInputCommandInteraction,
-    connection: VoiceConnection,
-  ): Promise<void> {
+  private async onAudioPlayerIdle(interaction: ChatInputCommandInteraction): Promise<void> {
     const nextItem = await this.playQueueService.getNextItem({
       guildId: interaction.guild.id,
     });
     if (!nextItem) {
-      connection.destroy();
-      this.playQueueService.destroyQueue(interaction.guild.id);
-      this.discordPlayerMessageService.delete(interaction.guild.id);
-
+      this.disconnectFromVoiceChannel(interaction);
       return;
     }
 
     await this.playNextTrack({ interaction });
+  }
+
+  public async disconnectFromVoiceChannel(interaction: ButtonInteraction | ChatInputCommandInteraction): Promise<void> {
+    const connection = getVoiceConnection(interaction.guild.id);
+    connection?.destroy();
+    this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+      interaction,
+      message: 'Disconnected from the voice channel',
+    });
+    this.playQueueService.destroyQueue(interaction.guild.id);
+
+    const currentPlayerMessageId = await this.discordPlayerMessageService.get(interaction.guild.id);
+
+    if (currentPlayerMessageId) {
+      try {
+        interaction.channel.messages.delete(currentPlayerMessageId);
+      } catch (e) {
+        this.logger.error('Failed to delete the current player message', e);
+      }
+    }
+    this.discordPlayerMessageService.delete(interaction.guild.id);
   }
 
   public async playNextTrack({
