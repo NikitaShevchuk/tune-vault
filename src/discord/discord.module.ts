@@ -10,6 +10,7 @@ import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordAudioService } from 'src/discord/discord.audio.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
 import { DiscordInteractionHelperService } from 'src/discord/discord.interaction.helper.service';
+import { DiscordController } from './discord.controller';
 
 @Module({
   providers: [
@@ -22,5 +23,6 @@ import { DiscordInteractionHelperService } from 'src/discord/discord.interaction
     DiscordInteractionHelperService,
   ],
   imports: [YoutubeModule, PlayQueueModule, ConfigModule],
+  controllers: [DiscordController],
 })
 export class DiscordModule {}
