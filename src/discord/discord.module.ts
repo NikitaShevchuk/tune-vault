@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 
 import { DiscordService } from 'src/discord/discord.service';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
@@ -20,6 +21,6 @@ import { DiscordInteractionHelperService } from 'src/discord/discord.interaction
     DiscordPlayerMessageService,
     DiscordInteractionHelperService,
   ],
-  imports: [YoutubeModule, PlayQueueModule],
+  imports: [YoutubeModule, PlayQueueModule, ConfigModule],
 })
 export class DiscordModule {}

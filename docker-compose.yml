@@ -21,6 +21,20 @@ services:
     networks:
       - redis
 
+  postgres:
+    image: postgres:16.3
+    container_name: postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'postgres'
+      POSTGRES_DB: 'tune-vault'
+    networks:
+      - postgres
+
 networks:
   redis:
+    driver: bridge
+  postgres:
     driver: bridge

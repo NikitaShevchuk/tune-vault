@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Client, Interaction } from 'discord.js';
 
 import { commands, intents } from 'src/discord/constants';
@@ -11,7 +12,10 @@ export class DiscordService {
     intents,
   });
 
-  constructor(private readonly discordInteractionHandlerService: DiscordInteractionHandlerService) {}
+  constructor(
+    private readonly discordInteractionHandlerService: DiscordInteractionHandlerService,
+    private readonly configService: ConfigService,
+  ) {}
 
   public initialize() {
     // Handle errors
@@ -20,7 +24,7 @@ export class DiscordService {
     });
 
     // Login
-    this.client.login(process.env.DISCORD_BOT_TOKEN);
+    this.client.login(this.configService.get<string>('discord.token'));
     this.client.on('ready', () => {
       this.logger.log(`🚀 Logged in as 🟢${this.client.user.tag}`);
     });
