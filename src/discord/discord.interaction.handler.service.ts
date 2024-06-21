@@ -20,7 +20,25 @@ export class DiscordInteractionHandlerService {
     private readonly discordInteractionHelperService: DiscordInteractionHelperService,
   ) {}
 
-  public handleButtonInteraction(interaction: Interaction): void {
+  // public async playFromUrl(url: string): Promise<void> {}
+
+  public handleInteraction(interaction: Interaction): void {
+    this.logger.log(
+      `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}.`,
+    );
+    if (interaction.isCommand()) {
+      this.handleCommandInteraction(interaction);
+      return;
+    }
+    if (interaction.isButton()) {
+      this.handleButtonInteraction(interaction);
+      return;
+    }
+
+    this.logger.error('Unknown interaction type.');
+  }
+
+  private handleButtonInteraction(interaction: Interaction): void {
     if (!interaction.isButton()) {
       return;
     }
@@ -41,7 +59,7 @@ export class DiscordInteractionHandlerService {
     }
   }
 
-  public async handleCommandInteraction(interaction: Interaction): Promise<void> {
+  private async handleCommandInteraction(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) {
       return;
     }
@@ -57,11 +75,11 @@ export class DiscordInteractionHandlerService {
     }
 
     if ([Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)) {
-      this.handlePlayCommand(interaction);
+      this.playFromInteraction(interaction);
     }
   }
 
-  private async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  private async playFromInteraction(interaction: ChatInputCommandInteraction): Promise<void> {
     const userInput = interaction.options.getString('link');
 
     if (!(interaction.member as GuildMember).voice.channel) {
@@ -72,7 +90,11 @@ export class DiscordInteractionHandlerService {
       return;
     }
 
-    const { isValid, isPlaylist, isYouTubeLink } = this.youtubeService.validateAndGetLinkInfo(userInput);
+    await this.play(userInput, interaction);
+  }
+
+  private async play(url: string, interaction?: ChatInputCommandInteraction): Promise<void> {
+    const { isValid, isPlaylist, isYouTubeLink } = this.youtubeService.validateAndGetLinkInfo(url);
 
     if (isYouTubeLink && !isValid) {
       await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
@@ -88,7 +110,7 @@ export class DiscordInteractionHandlerService {
     if (isPlaylist) {
       await this.pushPlaylistToQueue({
         interaction,
-        playlistUrl: userInput,
+        playlistUrl: url,
         hasItemsInQueue,
       });
       if (!hasItemsInQueue) {
@@ -104,13 +126,13 @@ export class DiscordInteractionHandlerService {
       this.pushToQueueAndPlayIfQueueWasEmpty({
         hasItemsInQueue,
         interaction,
-        mediaUrl: userInput,
+        mediaUrl: url,
       });
 
       return;
     }
 
-    const searchResult = await this.youtubeService.search(userInput);
+    const searchResult = await this.youtubeService.search(url);
     if (!searchResult) {
       await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
         interaction,

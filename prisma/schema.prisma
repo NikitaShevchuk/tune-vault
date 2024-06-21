@@ -18,3 +18,10 @@ model Guild {
   name     String
   joinedAt DateTime
 }
+
+model User {
+  id        String   @id
+  username  String
+  bot       Boolean
+  createdAt DateTime
+}

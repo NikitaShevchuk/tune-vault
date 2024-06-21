@@ -2,10 +2,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ButtonInteraction, ChatInputCommandInteraction, EmbedBuilder, InteractionReplyOptions } from 'discord.js';
 
 import { INTERACTION_REPLY_TIMEOUT_MS } from 'src/discord/constants';
+import { DiscordClientService } from 'src/discord/discord.client.service';
 
 @Injectable()
 export class DiscordInteractionHelperService {
   private readonly logger = new Logger(DiscordInteractionHelperService.name);
+
+  constructor(private readonly discordClientService: DiscordClientService) {}
 
   public async displaySuccessMessage({
     interaction,
@@ -38,11 +41,16 @@ export class DiscordInteractionHelperService {
     message,
     delayMs = INTERACTION_REPLY_TIMEOUT_MS,
   }: {
-    interaction: ChatInputCommandInteraction | ButtonInteraction;
+    interaction?: ChatInputCommandInteraction | ButtonInteraction;
     message: string | InteractionReplyOptions;
     delayMs?: number;
   }): Promise<void> {
     try {
+      if (!interaction) {
+        this.discordClientService.client.guilds.fetch;
+        return;
+      }
+
       if (interaction.replied) {
         await interaction.editReply(message);
       } else {
