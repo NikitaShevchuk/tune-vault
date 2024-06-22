@@ -1,23 +1,31 @@
-import { plainToInstance } from 'class-transformer';
-import { IsNumber, IsString, validateSync } from 'class-validator';
+import { Transform, plainToInstance } from 'class-transformer';
+import { IsEnum, IsNumber, IsString, validateSync } from 'class-validator';
 
 class EnvironmentVariables {
+  // App
+  @IsEnum(['development', 'production'])
+  APP_ENV: 'development' | 'production';
+  @Transform(({ value }) => parseInt(value))
+  @IsNumber()
+  PORT: number;
+  @IsString()
+  UI_URL: string;
+
   // Postgres
   @IsString()
   POSTGRES_USER: string;
-
   @IsString()
   POSTGRES_PASSWORD: string;
-
   @IsString()
   POSTGRES_DB: string;
-
   @IsString()
   DATABASE_URL: string;
 
   // Discord
   @IsString()
   DISCORD_BOT_TOKEN: string;
+  @IsString()
+  DISCORD_AUTH_URL: string;
 
   // Redis
   @IsString()

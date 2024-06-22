@@ -1,5 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ButtonInteraction, ChatInputCommandInteraction, EmbedBuilder, InteractionReplyOptions } from 'discord.js';
+import { ConfigService } from '@nestjs/config';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  InteractionReplyOptions,
+  MessageActionRowComponentBuilder,
+} from 'discord.js';
 
 import { INTERACTION_REPLY_TIMEOUT_MS } from 'src/discord/constants';
 import { DiscordClientService } from 'src/discord/discord.client.service';
@@ -8,7 +18,10 @@ import { DiscordClientService } from 'src/discord/discord.client.service';
 export class DiscordInteractionHelperService {
   private readonly logger = new Logger(DiscordInteractionHelperService.name);
 
-  constructor(private readonly discordClientService: DiscordClientService) {}
+  constructor(
+    private readonly discordClientService: DiscordClientService,
+    private readonly configService: ConfigService,
+  ) {}
 
   public async displaySuccessMessage({
     interaction,
@@ -60,5 +73,11 @@ export class DiscordInteractionHelperService {
     } catch (e) {
       this.logger.error('Failed to reply to an interaction', e);
     }
+  }
+
+  public getAuthButton(): ActionRowBuilder<MessageActionRowComponentBuilder> {
+    const oauth2url = this.configService.get<string>('DISCORD_AUTH_URL');
+    const authButton = new ButtonBuilder().setLabel('🔒 Authorize').setStyle(ButtonStyle.Link).setURL(oauth2url);
+    return new ActionRowBuilder().addComponents(authButton) as ActionRowBuilder<MessageActionRowComponentBuilder>;
   }
 }

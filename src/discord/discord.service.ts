@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Guild, User } from 'discord.js';
+import { HttpService } from '@nestjs/axios';
 
 import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DbService } from 'src/db/db.service';
-import { commands } from 'src/discord/constants';
+import { DISCORD_AUTH_URL, commands } from 'src/discord/constants';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
-import { Guild as TuneVaultGuild } from '@prisma/client';
-import { Guild } from 'discord.js';
+import { Guild as TuneVaultGuild, User as TuneVaultUser } from '@prisma/client';
 
 @Injectable()
 export class DiscordService {
@@ -17,6 +18,7 @@ export class DiscordService {
     private readonly discordClientService: DiscordClientService,
     private readonly dbService: DbService,
     private readonly discordInteractionHandlerService: DiscordInteractionHandlerService,
+    private readonly httpService: HttpService,
   ) {}
 
   /**
@@ -44,6 +46,45 @@ export class DiscordService {
     this.discordClientService.client.login(this.configService.get<string>('discord.token'));
     this.discordClientService.client.on('ready', () => {
       this.logger.log(`🚀 Logged in as 🟢${this.discordClientService.client.user.tag}`);
+    });
+  }
+
+  public async validateTokenAndGetDiscordUser(token: string): Promise<{ tokenIsValid: boolean; user: User | null }> {
+    try {
+      const response = await this.httpService.axiosRef.get<User>(DISCORD_AUTH_URL, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status !== 200) {
+        return { tokenIsValid: false, user: null };
+      }
+
+      return { tokenIsValid: true, user: response.data };
+    } catch (e) {
+      this.logger.error(e);
+      return { tokenIsValid: false, user: null };
+    }
+  }
+
+  public async upsertUser(user: User): Promise<TuneVaultUser> {
+    return await this.dbService.user.upsert({
+      create: {
+        id: user.id,
+        username: user.username,
+        bot: user.bot ?? false,
+        createdAt: new Date(),
+        globalName: user.globalName,
+      },
+      update: {
+        username: user.username,
+        bot: user.bot ?? false,
+        globalName: user.globalName,
+      },
+      where: {
+        id: user.id,
+      },
     });
   }
 

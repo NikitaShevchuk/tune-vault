@@ -20,7 +20,9 @@ export class DiscordInteractionHandlerService {
     private readonly discordInteractionHelperService: DiscordInteractionHelperService,
   ) {}
 
-  // public async playFromUrl(url: string): Promise<void> {}
+  public async playFromUrl(url: string): Promise<void> {
+    this.logger.log(`Playing from URL: ${url}`);
+  }
 
   public handleInteraction(interaction: Interaction): void {
     this.logger.log(
@@ -72,6 +74,22 @@ export class DiscordInteractionHandlerService {
 
     if (interaction.commandName === Commands.REFRESH_COMMANDS) {
       interaction.guild.commands.set(commands);
+      await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+        interaction,
+        message: 'Commands refreshed',
+      });
+    }
+
+    if (interaction.commandName === Commands.AUTH) {
+      const authButton = this.discordInteractionHelperService.getAuthButton();
+      await this.discordInteractionHelperService.replyAndDeleteAfterDelay({
+        interaction,
+        message: {
+          components: [authButton],
+          content: 'Click the button below to authorize the bot. This link will expire in 1 minute.',
+        },
+        delayMs: 60_000, // 1 minute
+      });
     }
 
     if ([Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)) {

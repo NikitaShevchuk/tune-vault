@@ -20,8 +20,10 @@ model Guild {
 }
 
 model User {
-  id        String   @id
-  username  String
-  bot       Boolean
-  createdAt DateTime
+  id         String   @id
+  username   String
+  globalName String
+  bot        Boolean
+  createdAt  DateTime
+  avatar     String?
 }

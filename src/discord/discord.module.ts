@@ -12,6 +12,7 @@ import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.
 import { DiscordInteractionHelperService } from 'src/discord/discord.interaction.helper.service';
 import { DiscordController } from 'src/discord/discord.controller';
 import { DiscordClientService } from 'src/discord/discord.client.service';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   providers: [
@@ -24,7 +25,7 @@ import { DiscordClientService } from 'src/discord/discord.client.service';
     DiscordInteractionHelperService,
     DiscordClientService,
   ],
-  imports: [YoutubeModule, PlayQueueModule, ConfigModule],
+  imports: [YoutubeModule, PlayQueueModule, ConfigModule, HttpModule],
   controllers: [DiscordController],
 })
 export class DiscordModule {}

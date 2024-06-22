@@ -4,6 +4,7 @@ export enum Commands {
   PLAY = 'play',
   P = 'p',
   REFRESH_COMMANDS = 'refreshcommands',
+  AUTH = 'auth',
 }
 
 export const playCommandOptions: ApplicationCommandOptionData[] = [
@@ -25,6 +26,10 @@ export const commands: ChatInputApplicationCommandData[] = [
     name: Commands.REFRESH_COMMANDS,
     description: 'Refresh the commands list',
   },
+  {
+    name: Commands.AUTH,
+    description: 'Authorize to use the Tune Vault Chrome Extension',
+  },
 ];
 
 export const intents = [
@@ -43,3 +48,5 @@ export enum ButtonIds {
 }
 
 export const INTERACTION_REPLY_TIMEOUT_MS = 5_000;
+
+export const DISCORD_AUTH_URL = 'https://discord.com/api/users/@me';
