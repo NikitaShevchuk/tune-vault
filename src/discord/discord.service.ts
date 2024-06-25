@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Guild, User } from 'discord.js';
+import { User } from 'discord.js';
 import { HttpService } from '@nestjs/axios';
 
-import { DiscordClientService } from 'src/discord/discord.client.service';
+import { User as TuneVaultUser } from '@prisma/client';
 import { DbService } from 'src/db/db.service';
 import { DISCORD_AUTH_URL, commands } from 'src/discord/constants';
+import { DiscordClientService } from 'src/discord/discord.client.service';
+import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
-import { Guild as TuneVaultGuild, User as TuneVaultUser } from '@prisma/client';
 
 @Injectable()
 export class DiscordService {
@@ -19,6 +20,7 @@ export class DiscordService {
     private readonly dbService: DbService,
     private readonly discordInteractionHandlerService: DiscordInteractionHandlerService,
     private readonly httpService: HttpService,
+    private readonly discordGuildService: DiscordGuildService,
   ) {}
 
   /**
@@ -34,7 +36,7 @@ export class DiscordService {
     this.discordClientService.client.on('guildCreate', async (guild) => {
       this.logger.log(`👋 Joined server: ${guild.name}`);
       await guild.commands.set(commands);
-      await this.upsertGuild(guild);
+      await this.discordGuildService.upsertGuild(guild);
     });
 
     // Handle interactions
@@ -84,23 +86,6 @@ export class DiscordService {
       },
       where: {
         id: user.id,
-      },
-    });
-  }
-
-  private async upsertGuild(guild: Guild): Promise<TuneVaultGuild> {
-    return await this.dbService.guild.upsert({
-      create: {
-        id: guild.id,
-        name: guild.name,
-        joinedAt: guild.joinedAt,
-      },
-      update: {
-        name: guild.name,
-        joinedAt: guild.joinedAt,
-      },
-      where: {
-        id: guild.id,
       },
     });
   }

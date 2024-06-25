@@ -4,13 +4,14 @@ import { CacheModule } from '@nestjs/cache-manager';
 
 import { AppController } from 'src/app.controller';
 import { AppService } from 'src/app.service';
-import { DiscordModule } from 'src/discord/discord.module';
-import { YoutubeModule } from 'src/youtube/youtube.module';
-import { redisOptions } from 'src/db/redis-options';
-import { PlayQueueModule } from './play.queue/play.queue.module';
+import { PlayQueueModule } from 'src/play.queue/play.queue.module';
 import configuration from 'src/config/configuration';
 import { validate } from 'src/config/env.validation';
-import { DbModule } from './db/db.module';
+import { DbModule } from 'src/db/db.module';
+import { UserModule } from 'src/user/user.module';
+import { redisOptions } from 'src/db/redis-options';
+import { DiscordModule } from 'src/discord/discord.module';
+import { YoutubeModule } from 'src/youtube/youtube.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DbModule } from './db/db.module';
     YoutubeModule,
     PlayQueueModule,
     DbModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -14,16 +14,26 @@ datasource db {
 }
 
 model Guild {
-  id       String   @id
-  name     String
-  joinedAt DateTime
+  // Values from Discord
+  id          String   @id
+  name        String
+  joinedAt    DateTime
+  activeUsers User[]
+
+  // Application specific values
+  activeChannelId String?
 }
 
 model User {
+  // Values from Discord
   id         String   @id
   username   String
   globalName String
   bot        Boolean
   createdAt  DateTime
   avatar     String?
+
+  // Application specific values
+  activeGuild   Guild?  @relation(fields: [activeGuildId], references: [id])
+  activeGuildId String?
 }

@@ -1,7 +1,6 @@
 import { Body, Controller, Logger, Post, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 
-import { PlayDto } from 'src/discord/dto/play.dto';
-import { AuthDto } from 'src/discord/dto/auth.dto';
+import { PlayDto, AuthDto } from 'src/discord/dto';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
 import { DiscordService } from 'src/discord//discord.service';
 import { Transformers } from 'src/utils/transformers';
@@ -19,7 +18,7 @@ export class DiscordController {
   @Post('play')
   public async play(@Body() { url }: PlayDto): Promise<void> {
     try {
-      await this.discordInteractionHandlerService.playFromUrl(url);
+      await this.discordInteractionHandlerService.playFromEndpoint(url);
     } catch (e) {
       // TODO: Add sentry logging
       this.logger.error(e);

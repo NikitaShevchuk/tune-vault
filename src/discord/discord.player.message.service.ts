@@ -10,13 +10,17 @@ import {
   InteractionReplyOptions,
   Message,
   MessageActionRowComponentBuilder,
+  MessageCreateOptions,
   MessageEditOptions,
   MessagePayload,
 } from 'discord.js';
 
 import { ButtonIds } from 'src/discord/constants';
+import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
+import { DiscordGuildService } from 'src/discord/discord.guild.service';
+import { DiscordMessageService } from 'src/discord/discord.message.service';
 
 const PLAYER_MESSAGES_IDS_KEY = 'player-messages-ids';
 
@@ -25,25 +29,51 @@ export class DiscordPlayerMessageService {
   private readonly logger = new Logger(DiscordPlayerMessageService.name);
 
   constructor(
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+
     private readonly youtubeService: YoutubeService,
     private readonly playQueueService: PlayQueueService,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly discordMessageService: DiscordMessageService,
+    private readonly discordGuildService: DiscordGuildService,
   ) {}
 
-  public async sendCurrentTrackDetails(interaction: CommandInteraction | ButtonInteraction): Promise<void> {
-    const interactionReplyPayload = await this.getPlayerMessagePayload(interaction.guild.id);
-    await this.editOrSend(interaction, interactionReplyPayload);
+  public async sendCurrentTrackDetails({
+    interaction,
+    userId,
+  }: InteractionOrUserId<CommandInteraction | ButtonInteraction>): Promise<void> {
+    const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+    const message = await this.getPlayerMessagePayload(guildId);
+    await this.editOrReply({ interaction, message, userId });
   }
 
-  public async editOrSend(
-    interaction: CommandInteraction | ButtonInteraction,
-    message: string | InteractionReplyOptions | MessagePayload,
-  ): Promise<Message | null> {
-    const playerMessageId = await this.get(interaction.guild.id);
-    if (!playerMessageId) {
-      return await this.replyToInteractionAndSaveMessageId(interaction, message);
+  public async get(guildId: string): Promise<string | null> {
+    const playerMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
+
+    if (playerMessagesIds && playerMessagesIds[guildId]) {
+      return playerMessagesIds[guildId];
     }
-    return await this.editExistingMessage(interaction, message, playerMessageId);
+
+    return null;
+  }
+
+  /**
+   * Will edit the existing player message if it exists, otherwise will reply to the interaction and save the message id.
+   * We don't want to spam the channel with multiple player messages.
+   */
+  public async editOrReply(
+    messageOptions: ReplyPayload<CommandInteraction | ButtonInteraction>,
+  ): Promise<Message | null> {
+    const { interaction, userId } = messageOptions;
+
+    const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+    const playerMessageId = await this.get(guildId);
+
+    if (!playerMessageId) {
+      await this.replyToInteractionAndSaveMessageId(messageOptions);
+      return;
+    }
+
+    return await this.editExistingMessage({ playerMessageId, ...messageOptions });
   }
 
   public async delete(guildId: string): Promise<void> {
@@ -58,7 +88,7 @@ export class DiscordPlayerMessageService {
     await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, allPlayersMessagesIds);
   }
 
-  public async getPlayerMessagePayload(guildId: string): Promise<InteractionReplyOptions> {
+  public async getPlayerMessagePayload(guildId: string): Promise<MessagePayload | MessageCreateOptions> {
     const currentVideo = await this.playQueueService.getCurrentItem(guildId);
     const nextVideo = await this.playQueueService.getNextItem({
       guildId,
@@ -111,15 +141,18 @@ export class DiscordPlayerMessageService {
     ) as ActionRowBuilder<MessageActionRowComponentBuilder>;
   }
 
-  private async editExistingMessage(
-    interaction: CommandInteraction | ButtonInteraction,
-    message: string | InteractionReplyOptions | MessagePayload,
-    playerMessageId: string,
-  ): Promise<Message | null> {
+  private async editExistingMessage({
+    interaction,
+    userId,
+    playerMessageId,
+    message,
+  }: { playerMessageId: string } & ReplyPayload<CommandInteraction | ButtonInteraction>): Promise<Message | null> {
     try {
-      const existingMessage = await interaction.channel.messages.fetch(playerMessageId);
+      const existingMessage = interaction
+        ? await interaction.channel.messages.fetch(playerMessageId)
+        : await (await this.discordMessageService.getActiveTextChannel(userId)).messages.fetch(playerMessageId);
       if (existingMessage) {
-        await existingMessage.edit(message as MessageEditOptions);
+        await existingMessage.edit(message as unknown as MessageEditOptions);
         return existingMessage;
       }
       return null;
@@ -129,39 +162,25 @@ export class DiscordPlayerMessageService {
     }
   }
 
-  private async replyToInteractionAndSaveMessageId(
-    interaction: CommandInteraction | ButtonInteraction,
-    message: string | InteractionReplyOptions | MessagePayload,
-  ): Promise<Message | null> {
+  private async replyToInteractionAndSaveMessageId({
+    interaction,
+    message,
+    userId,
+  }: ReplyPayload<CommandInteraction | ButtonInteraction>): Promise<void> {
     try {
-      const newInteractionReply = await interaction.reply(message);
-      if (newInteractionReply) {
-        const newMessage = await newInteractionReply.fetch();
-        const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string> | null>(
-          PLAYER_MESSAGES_IDS_KEY,
-        );
+      const newMessage = interaction
+        ? await interaction.reply(message as InteractionReplyOptions)
+        : await (await this.discordMessageService.getActiveTextChannel(userId))?.send(message);
+      const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
 
-        await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, {
-          ...(allPlayersMessagesIds ?? {}),
-          [interaction.guildId]: newMessage.id,
-        });
-
-        return newMessage;
-      }
+      const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string> | null>(PLAYER_MESSAGES_IDS_KEY);
+      await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, {
+        ...(allPlayersMessagesIds ?? {}),
+        [guildId]: (await newMessage?.fetch())?.id,
+      });
     } catch (e) {
       this.logger.error('Failed to reply to interaction and save message id.', e);
       return null;
     }
-    return null;
-  }
-
-  public async get(guildId: string): Promise<string | null> {
-    const playerMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
-
-    if (playerMessagesIds && playerMessagesIds[guildId]) {
-      return playerMessagesIds[guildId];
-    }
-
-    return null;
   }
 }
