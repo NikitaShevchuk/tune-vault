@@ -36,4 +36,10 @@ model User {
   // Application specific values
   activeGuild   Guild?  @relation(fields: [activeGuildId], references: [id])
   activeGuildId String?
+  role          Role    @default(user)
+}
+
+enum Role {
+  admin @map("ADMIN")
+  user  @map("USER")
 }

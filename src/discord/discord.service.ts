@@ -1,11 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { User } from 'discord.js';
-import { HttpService } from '@nestjs/axios';
 
 import { User as TuneVaultUser } from '@prisma/client';
 import { DbService } from 'src/db/db.service';
-import { DISCORD_AUTH_URL, commands } from 'src/discord/constants';
+import { commands } from 'src/discord/constants';
 import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
@@ -19,7 +18,6 @@ export class DiscordService {
     private readonly discordClientService: DiscordClientService,
     private readonly dbService: DbService,
     private readonly discordInteractionHandlerService: DiscordInteractionHandlerService,
-    private readonly httpService: HttpService,
     private readonly discordGuildService: DiscordGuildService,
   ) {}
 
@@ -51,25 +49,6 @@ export class DiscordService {
     });
   }
 
-  public async validateTokenAndGetDiscordUser(token: string): Promise<{ tokenIsValid: boolean; user: User | null }> {
-    try {
-      const response = await this.httpService.axiosRef.get<User>(DISCORD_AUTH_URL, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.status !== 200) {
-        return { tokenIsValid: false, user: null };
-      }
-
-      return { tokenIsValid: true, user: response.data };
-    } catch (e) {
-      this.logger.error(e);
-      return { tokenIsValid: false, user: null };
-    }
-  }
-
   public async upsertUser(user: User): Promise<TuneVaultUser> {
     return await this.dbService.user.upsert({
       create: {
@@ -78,11 +57,13 @@ export class DiscordService {
         bot: user.bot ?? false,
         createdAt: new Date(),
         globalName: user.globalName,
+        avatar: user.avatar,
       },
       update: {
         username: user.username,
         bot: user.bot ?? false,
         globalName: user.globalName,
+        avatar: user.avatar,
       },
       where: {
         id: user.id,

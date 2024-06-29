@@ -10,6 +10,12 @@ class EnvironmentVariables {
   PORT: number;
   @IsString()
   UI_URL: string;
+  @IsString()
+  UI_HOST: string;
+  @IsString()
+  AUTH_URL: string;
+  @IsString()
+  JWT_SECRET: string;
 
   // Postgres
   @IsString()
@@ -25,7 +31,11 @@ class EnvironmentVariables {
   @IsString()
   DISCORD_BOT_TOKEN: string;
   @IsString()
-  DISCORD_AUTH_URL: string;
+  DISCORD_CLIENT_ID: string;
+  @IsString()
+  DISCORD_REDIRECT_URL: string;
+  @IsString()
+  DISCORD_CLIENT_SECRET: string;
 
   // Redis
   @IsString()

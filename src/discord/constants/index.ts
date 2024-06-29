@@ -49,4 +49,5 @@ export enum ButtonIds {
 
 export const INTERACTION_REPLY_TIMEOUT_MS = 5_000;
 
-export const DISCORD_AUTH_URL = 'https://discord.com/api/users/@me';
+export const DISCORD_USER_URL = 'https://discord.com/api/users/@me';
+export const DISCORD_AUTH_URL = 'https://discord.com/oauth2/authorize';

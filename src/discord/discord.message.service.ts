@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -11,11 +10,13 @@ import {
   MessageActionRowComponentBuilder,
   TextChannel,
 } from 'discord.js';
+import { ConfigService } from '@nestjs/config';
 
 import { INTERACTION_REPLY_TIMEOUT_MS } from 'src/discord/constants';
 import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
 import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
+import { Configuration } from 'src/config/configuration';
 
 @Injectable()
 export class DiscordMessageService {
@@ -23,8 +24,8 @@ export class DiscordMessageService {
 
   constructor(
     private readonly discordClientService: DiscordClientService,
-    private readonly configService: ConfigService,
     private readonly discordGuildService: DiscordGuildService,
+    private readonly configService: ConfigService<Configuration, true>,
   ) {}
 
   public async displaySuccessMessage({
@@ -98,8 +99,11 @@ export class DiscordMessageService {
   }
 
   public getAuthButton(): ActionRowBuilder<MessageActionRowComponentBuilder> {
-    const oauth2url = this.configService.get<string>('DISCORD_AUTH_URL');
-    const authButton = new ButtonBuilder().setLabel('🔒 Authorize').setStyle(ButtonStyle.Link).setURL(oauth2url);
+    const authButton = new ButtonBuilder()
+      .setLabel('🔒 Authorize')
+      .setStyle(ButtonStyle.Link)
+      .setURL(this.configService.get('authUrl', { infer: true }));
+
     return new ActionRowBuilder().addComponents(authButton) as ActionRowBuilder<MessageActionRowComponentBuilder>;
   }
 

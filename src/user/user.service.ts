@@ -1,26 +1,33 @@
 import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+
+import { UpdateUserDto } from 'src/user/dto/update-user.dto';
+import { DbService } from 'src/db/db.service';
+import { User as TuneVaultUser } from '@prisma/client';
 
 @Injectable()
 export class UserService {
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  constructor(private readonly dbService: DbService) {}
+
+  public async findAll(): Promise<TuneVaultUser[]> {
+    return this.dbService.user.findMany();
   }
 
-  findAll() {
-    return `This action returns all user`;
+  public async findOne(id: string): Promise<TuneVaultUser> {
+    return this.dbService.user.findUnique({
+      where: { id },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  public async update(id: string, updateUserDto: UpdateUserDto): Promise<TuneVaultUser> {
+    return this.dbService.user.update({
+      where: { id },
+      data: updateUserDto,
+    });
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  public async remove(id: string): Promise<TuneVaultUser> {
+    return this.dbService.user.delete({
+      where: { id },
+    });
   }
 }

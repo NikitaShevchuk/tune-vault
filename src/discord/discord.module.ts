@@ -29,5 +29,6 @@ import { DiscordService } from 'src/discord/discord.service';
   ],
   imports: [YoutubeModule, PlayQueueModule, ConfigModule, HttpModule],
   controllers: [DiscordController],
+  exports: [DiscordService],
 })
 export class DiscordModule {}

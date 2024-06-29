@@ -12,6 +12,7 @@ import { UserModule } from 'src/user/user.module';
 import { redisOptions } from 'src/db/redis-options';
 import { DiscordModule } from 'src/discord/discord.module';
 import { YoutubeModule } from 'src/youtube/youtube.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { YoutubeModule } from 'src/youtube/youtube.module';
     PlayQueueModule,
     DbModule,
     UserModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
