@@ -1,8 +1,11 @@
+import { AppEnv } from 'src/config/env.validation';
+
 export type Configuration = ReturnType<typeof getConfig>;
 
 const getConfig = () =>
   ({
     port: parseInt(process.env.PORT, 10) || 3000,
+    appEnv: process.env.APP_ENV as AppEnv,
     uiUrl: process.env.UI_URL,
     uiHost: process.env.UI_HOST,
     authUrl: process.env.AUTH_URL,
@@ -22,6 +25,10 @@ const getConfig = () =>
       username: process.env.POSTGRES_USER,
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DB,
+    },
+    extension: {
+      extensionIdProd: process.env.EXTENSION_ID_PROD,
+      extensionIdDev: process.env.EXTENSION_ID_DEV as string | undefined,
     },
   }) as const;
 

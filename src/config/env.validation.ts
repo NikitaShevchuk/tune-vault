@@ -1,10 +1,15 @@
 import { Transform, plainToInstance } from 'class-transformer';
-import { IsEnum, IsNumber, IsString, validateSync } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, validateSync } from 'class-validator';
+
+export enum AppEnv {
+  development = 'development',
+  production = 'production',
+}
 
 class EnvironmentVariables {
   // App
-  @IsEnum(['development', 'production'])
-  APP_ENV: 'development' | 'production';
+  @IsEnum([AppEnv.development, AppEnv.production])
+  APP_ENV: AppEnv;
   @Transform(({ value }) => parseInt(value))
   @IsNumber()
   PORT: number;
@@ -42,6 +47,13 @@ class EnvironmentVariables {
   REDIS_HOST: string;
   @IsNumber()
   REDIS_PORT: number;
+
+  // Extension
+  @IsString()
+  @IsOptional()
+  EXTENSION_ID_DEV?: string | undefined;
+  @IsString()
+  EXTENSION_ID_PROD: string;
 }
 
 export function validate(config: Record<string, unknown>) {
