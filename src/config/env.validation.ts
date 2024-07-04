@@ -50,10 +50,7 @@ class EnvironmentVariables {
 
   // Extension
   @IsString()
-  @IsOptional()
-  EXTENSION_ID_DEV?: string | undefined;
-  @IsString()
-  EXTENSION_ID_PROD: string;
+  EXTENSION_ID: string;
 }
 
 export function validate(config: Record<string, unknown>) {

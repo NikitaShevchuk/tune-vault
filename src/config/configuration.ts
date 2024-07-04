@@ -27,8 +27,7 @@ const getConfig = () =>
       database: process.env.POSTGRES_DB,
     },
     extension: {
-      extensionIdProd: process.env.EXTENSION_ID_PROD,
-      extensionIdDev: process.env.EXTENSION_ID_DEV as string | undefined,
+      id: process.env.EXTENSION_ID,
     },
   }) as const;
 
