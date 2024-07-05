@@ -58,7 +58,12 @@ export class DiscordInteractionHandlerService {
       this.discordAudioService.pauseOrPlayAudio(interaction);
     }
     if (buttonId === ButtonIds.NEXT) {
-      this.discordAudioService.playNextTrack({ interaction, stopCurrent: true, replyToInteraction: true });
+      this.discordAudioService.playNextTrack({
+        interaction,
+        stopCurrent: true,
+        replyToInteraction: true,
+        userId: undefined,
+      });
     }
     if (buttonId === ButtonIds.DISCONNECT) {
       this.discordAudioService.disconnectFromVoiceChannel({ interaction, userId: undefined });

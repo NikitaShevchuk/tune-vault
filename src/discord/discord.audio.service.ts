@@ -102,7 +102,7 @@ export class DiscordAudioService {
       return;
     }
 
-    await this.playNextTrack({ interaction });
+    await this.playNextTrack({ interaction, userId });
   }
 
   public async disconnectFromVoiceChannel({
@@ -140,21 +140,21 @@ export class DiscordAudioService {
     interaction,
     stopCurrent,
     replyToInteraction,
+    userId,
   }: {
-    interaction: ButtonInteraction | ChatInputCommandInteraction;
     stopCurrent?: boolean;
     replyToInteraction?: boolean;
-  }): Promise<void> {
-    const player = this.playerByGuildId.get(interaction.guild.id);
-    const nextItem = await this.playQueueService.getNextItem({
-      guildId: interaction.guild.id,
-    });
+  } & InteractionOrUserId<ButtonInteraction | ChatInputCommandInteraction>): Promise<void> {
+    const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+    const player = this.playerByGuildId.get(guildId);
+    const nextItem = await this.playQueueService.getNextItem({ guildId });
+
     if (!player || !nextItem) {
       if (replyToInteraction) {
         this.discordMessageService.replyAndDeleteAfterDelay({
           message: 'No items in the queue',
           interaction,
-          userId: undefined,
+          userId,
         });
       }
       return;
@@ -164,11 +164,11 @@ export class DiscordAudioService {
       this.discordMessageService.replyAndDeleteAfterDelay({
         message: 'Playing next track',
         interaction,
-        userId: undefined,
+        userId,
       });
     }
 
-    await this.discordPlayerMessageService.sendCurrentTrackDetails({ interaction, userId: undefined });
+    await this.discordPlayerMessageService.sendCurrentTrackDetails({ interaction, userId });
 
     const { stream } = await streamFromYtLink(nextItem.url, {
       discordPlayerCompatibility: true,
