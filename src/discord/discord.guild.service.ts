@@ -8,6 +8,10 @@ import { Guild as TuneVaultGuild } from '@prisma/client';
 export class DiscordGuildService {
   constructor(private readonly dbService: DbService) {}
 
+  public async findMany(ids: string[]): Promise<TuneVaultGuild[]> {
+    return await this.dbService.guild.findMany({ where: { id: { in: ids } } });
+  }
+
   public async find(guildId: string): Promise<TuneVaultGuild> {
     return await this.dbService.guild.findUnique({
       where: {
