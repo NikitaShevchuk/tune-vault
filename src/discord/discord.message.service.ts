@@ -42,7 +42,7 @@ export class DiscordMessageService {
     try {
       if (!interaction) {
         const activeChannel = await this.getActiveTextChannel(userId);
-        await activeChannel.send(payload);
+        const message = await activeChannel.send(payload);
 
         if (shouldDeleteAfterDelay) {
           setTimeout(() => {
