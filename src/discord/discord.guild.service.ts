@@ -8,13 +8,10 @@ import { Guild as TuneVaultGuild } from '@prisma/client';
 export class DiscordGuildService {
   constructor(private readonly dbService: DbService) {}
 
-  public async updateActiveChannelId(guildId: string, channelId: string): Promise<void> {
-    await this.dbService.guild.update({
+  public async find(guildId: string): Promise<TuneVaultGuild> {
+    return await this.dbService.guild.findUnique({
       where: {
         id: guildId,
-      },
-      data: {
-        activeChannelId: channelId,
       },
     });
   }
@@ -31,7 +28,16 @@ export class DiscordGuildService {
     });
   }
 
-  public async upsertGuild(guild: Guild): Promise<TuneVaultGuild> {
+  public async update(guild: Partial<TuneVaultGuild>): Promise<TuneVaultGuild> {
+    return this.dbService.guild.update({
+      where: {
+        id: guild.id,
+      },
+      data: guild,
+    });
+  }
+
+  public async upsert(guild: Guild): Promise<TuneVaultGuild> {
     return await this.dbService.guild.upsert({
       create: {
         id: guild.id,

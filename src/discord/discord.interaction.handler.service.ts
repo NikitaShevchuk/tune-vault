@@ -9,6 +9,7 @@ import { DiscordAudioService } from 'src/discord/discord.audio.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
@@ -21,16 +22,18 @@ export class DiscordInteractionHandlerService {
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
     private readonly discordMessageService: DiscordMessageService,
     private readonly discordGuildService: DiscordGuildService,
+    private readonly userService: UserService,
   ) {}
 
-  public async playFromEndpoint(url: string): Promise<void> {
-    this.play({ url, userId: '373172724345864194', interaction: undefined });
+  public async playFromHttp({ url, userId }: { url: string; userId: string }): Promise<void> {
+    this.play({ url, userId, interaction: undefined });
   }
 
   public handleInteraction(interaction: Interaction): void {
     this.logger.log(
       `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}.`,
     );
+    this.updateActiveGuildBasedOnInteraction(interaction);
 
     if (interaction.isCommand()) {
       this.handleCommandInteraction(interaction);
@@ -131,7 +134,7 @@ export class DiscordInteractionHandlerService {
    * Plays a track or a playlist from a given URL
    * Either an interaction or a user ID must be provided
    */
-  public async play({
+  private async play({
     url,
     ...interactionOrUserId
   }: { url: string } & InteractionOrUserId<ChatInputCommandInteraction>): Promise<void> {
@@ -287,5 +290,26 @@ export class DiscordInteractionHandlerService {
       shouldDeleteAfterDelay: hasItemsInQueue,
       userId,
     });
+  }
+
+  private async updateActiveGuildBasedOnInteraction(interaction: Interaction): Promise<void> {
+    const tuenVaultGuild = await this.discordGuildService.find(interaction.guild.id);
+    const activeChannelAlreadySet = tuenVaultGuild.activeChannelId === interaction.channel.id;
+
+    if (!activeChannelAlreadySet) {
+      await this.discordGuildService.update({
+        id: interaction.guild.id,
+        activeChannelId: interaction.channel.id,
+      });
+    }
+
+    const user = await this.userService.findOne(interaction.user.id);
+    const activeGuildAlreadySet = user.activeGuildId === interaction.guild.id;
+
+    if (!activeGuildAlreadySet) {
+      await this.userService.update(user.id, {
+        activeGuildId: interaction.guild.id,
+      });
+    }
   }
 }

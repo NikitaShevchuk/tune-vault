@@ -19,4 +19,8 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   avatar?: string;
+
+  @IsOptional()
+  @IsString()
+  activeGuildId?: string;
 }

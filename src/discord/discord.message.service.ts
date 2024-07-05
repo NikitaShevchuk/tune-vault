@@ -81,6 +81,11 @@ export class DiscordMessageService {
     try {
       if (!interaction) {
         const activeChannel = await this.getActiveTextChannel(userId);
+
+        if (!activeChannel) {
+          return;
+        }
+
         const newMessage = await activeChannel.send(message);
         setTimeout(() => newMessage.delete(), delayMs);
         return;
@@ -123,6 +128,10 @@ export class DiscordMessageService {
     // Fallback to the first text channel in the guild
     const channels = await guild.channels.fetch();
     const textChannel = channels.find((channel) => channel.isTextBased()) as TextChannel;
-    return textChannel ?? null;
+    if (!textChannel) {
+      return null;
+    }
+    await this.discordGuildService.update({ ...userActiveGuild, activeChannelId: textChannel.id });
+    return textChannel;
   }
 }

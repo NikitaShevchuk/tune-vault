@@ -34,7 +34,7 @@ export class DiscordService {
     this.discordClientService.client.on('guildCreate', async (guild) => {
       this.logger.log(`👋 Joined server: ${guild.name}`);
       await guild.commands.set(commands);
-      await this.discordGuildService.upsertGuild(guild);
+      await this.discordGuildService.upsert(guild);
     });
 
     // Handle interactions
