@@ -47,10 +47,12 @@ export class DiscordGuildService {
         id: guild.id,
         name: guild.name,
         joinedAt: guild.joinedAt,
+        icon: guild.icon,
       },
       update: {
         name: guild.name,
         joinedAt: guild.joinedAt,
+        icon: guild.icon,
       },
       where: {
         id: guild.id,
