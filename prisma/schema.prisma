@@ -15,12 +15,13 @@ datasource db {
 
 model Guild {
   // Values from Discord
-  id          String   @id
-  name        String
-  joinedAt    DateTime
-  activeUsers User[]
+  id       String   @id
+  name     String
+  joinedAt DateTime
+  icon     String?
 
   // Application specific values
+  activeUsers     User[]
   activeChannelId String?
 }
 
