@@ -33,6 +33,11 @@ export class AuthController {
     const isProduction = this.configService.get('environment') === 'production';
     res.cookie('token', jwt.access_token, { secure: isProduction });
 
+    // The instance of user here comes from the passport strategy, which is not the same as the user in the database
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    res.cookie('discord-token', req.user.accessToken, { secure: isProduction });
+
     return res.redirect(`${this.configService.get('uiUrl')}/after-auth`);
   }
 
