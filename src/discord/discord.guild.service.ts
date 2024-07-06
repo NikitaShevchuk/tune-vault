@@ -21,7 +21,7 @@ export class DiscordGuildService {
   }
 
   public async getActiveGuild(userId: string): Promise<TuneVaultGuild> {
-    return await this.dbService.guild.findFirstOrThrow({
+    return await this.dbService.guild.findFirst({
       where: {
         activeUsers: {
           some: {

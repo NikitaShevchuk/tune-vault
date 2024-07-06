@@ -7,7 +7,6 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from 'src/auth/auth.service';
 import { DiscordStrategy } from 'src/auth/strategies/discord.auth.strategy';
 import { AuthController } from 'src/auth/auth.controller';
-import { DiscordModule } from 'src/discord/discord.module';
 import { Configuration } from 'src/config/configuration';
 import { UserModule } from 'src/user/user.module';
 import { JwtStrategy } from 'src/auth/strategies/jwt.strategy';
@@ -27,7 +26,6 @@ import { JwtStrategy } from 'src/auth/strategies/jwt.strategy';
     ConfigModule,
     PassportModule,
 
-    DiscordModule,
     UserModule,
   ],
   exports: [AuthService],

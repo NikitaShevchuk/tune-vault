@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt.auth.guard';
 import { Guild as TuneVaultGuild } from '@prisma/client';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { FindGuildsDto } from 'src/discord/dto/find.guilds.dto';
+import { UserService } from 'src/user/user.service';
 
 @Controller('discord')
 export class DiscordController {
@@ -28,6 +30,7 @@ export class DiscordController {
   constructor(
     private readonly discordInteractionHandlerService: DiscordInteractionHandlerService,
     private readonly discordGuildService: DiscordGuildService,
+    private readonly userService: UserService,
   ) {}
 
   @Get('guild')
@@ -41,7 +44,11 @@ export class DiscordController {
   @Roles(UserRoles.admin)
   public async play(@Req() request: Request, @Body() { url }: PlayDto): Promise<void> {
     try {
-      await this.discordInteractionHandlerService.playFromHttp({ url, userId: request.user.id });
+      const user = await this.userService.findOne(request.user.id);
+      if (!user.activeGuildId) {
+        throw new BadRequestException('No active guild found');
+      }
+      await this.discordInteractionHandlerService.playFromHttp({ url, userId: user.id });
     } catch (e) {
       // TODO: Add sentry logging
       this.logger.error(e);
