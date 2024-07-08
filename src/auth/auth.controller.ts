@@ -39,12 +39,6 @@ export class AuthController {
     return res.redirect(`${this.configService.get('uiUrl')}/after-auth`);
   }
 
-  @Get('me')
-  @UseGuards(JwtAuthGuard)
-  public async me(@Req() req: Request): Promise<TuneVaultUser> {
-    return await this.userService.findOne(req.user.id);
-  }
-
   @Get('logout')
   @UseGuards(JwtAuthGuard)
   public async logout(@Req() req: Request, @Res() res: Response) {

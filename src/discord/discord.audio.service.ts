@@ -150,13 +150,11 @@ export class DiscordAudioService {
     const nextItem = await this.playQueueService.getNextItem({ guildId });
 
     if (!player || !nextItem) {
-      if (replyToInteraction) {
-        this.discordMessageService.replyAndDeleteAfterDelay({
-          message: 'No items in the queue',
-          interaction,
-          userId,
-        });
-      }
+      this.discordMessageService.replyAndDeleteAfterDelay({
+        message: 'No items in the queue',
+        interaction,
+        userId,
+      });
       return;
     }
 

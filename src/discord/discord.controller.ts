@@ -36,7 +36,7 @@ export class DiscordController {
   @Get('guild')
   @UseGuards(JwtAuthGuard)
   public async getGuilds(@Query() { ids }: FindGuildsDto): Promise<TuneVaultGuild[]> {
-    return this.discordGuildService.findMany(ids);
+    return this.discordGuildService.findMany(ids.split(','));
   }
 
   @Post('play')
