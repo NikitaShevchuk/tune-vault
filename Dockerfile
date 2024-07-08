@@ -4,7 +4,7 @@ FROM node:20-alpine
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Create app directory
-WORKDIR /usr/src/app
+WORKDIR /app
 
 # Install app dependencies
 COPY package*.json ./
@@ -20,7 +20,7 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose the port on which the application will run
-EXPOSE 3000
+EXPOSE $PORT
 
 # Start the application
 CMD [ "npm", "run", "start" ]

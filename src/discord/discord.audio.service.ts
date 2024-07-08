@@ -51,7 +51,6 @@ export class DiscordAudioService {
       await this.onConnectionReady(guildId, connection, player);
       onSuccess();
     });
-
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
         await this.onAudioPlayerIdle({ interaction, userId });
