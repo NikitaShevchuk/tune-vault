@@ -6,7 +6,6 @@ import { Request, Response } from 'express';
 import { Transformers } from 'src/utils/transformers';
 import { AuthService } from 'src/auth/auth.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.auth.guard';
-import { User as TuneVaultUser } from '@prisma/client';
 import { UserService } from 'src/user/user.service';
 import { Configuration } from 'src/config/configuration';
 

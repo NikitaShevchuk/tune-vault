@@ -30,6 +30,6 @@ import { UserModule } from 'src/user/user.module';
   ],
   imports: [YoutubeModule, PlayQueueModule, ConfigModule, HttpModule, UserModule],
   controllers: [DiscordController],
-  exports: [DiscordService],
+  exports: [DiscordService, DiscordInteractionHandlerService, DiscordGuildService],
 })
 export class DiscordModule {}

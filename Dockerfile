@@ -12,6 +12,8 @@ RUN npm install
 
 # Bundle app source
 COPY . .
+# Cpoy the .env file
+COPY .env.prod .env
 
 # Change ownership of the /app directory to the non-root user
 RUN chown -R appuser:appgroup /app

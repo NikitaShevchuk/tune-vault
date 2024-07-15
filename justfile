@@ -21,7 +21,7 @@ build: (warn-if-git-diff)
     ECR_HOST="817545410935.dkr.ecr.us-east-1.amazonaws.com"
     IMAGE_NAME="tune-vault"
     GIT_COMMIT_HASH=$(git rev-parse --short HEAD)
-    docker build --env-file .env.prod --build-arg="LOCAL=false" --build-arg="GIT_COMMIT_HASH=${GIT_COMMIT_HASH}" --progress=plain --platform=linux/x86 -t ${IMAGE_NAME}:${GIT_COMMIT_HASH} ./
+    docker build --build-arg="LOCAL=false" --build-arg="GIT_COMMIT_HASH=${GIT_COMMIT_HASH}" --progress=plain -t ${IMAGE_NAME}:${GIT_COMMIT_HASH} .
 
     IMAGE_URI=${ECR_HOST}/${IMAGE_NAME}:${GIT_COMMIT_HASH}
     #! IMAGE_URI_BRANCH=${ECR_HOST}/${IMAGE_NAME}:prod
