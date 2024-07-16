@@ -1,6 +1,4 @@
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Cache } from 'cache-manager';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -21,20 +19,18 @@ import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
-
-const PLAYER_MESSAGES_IDS_KEY = 'player-messages-ids';
+import { DbService } from 'src/db/db.service';
 
 @Injectable()
 export class DiscordPlayerMessageService {
   private readonly logger = new Logger(DiscordPlayerMessageService.name);
 
   constructor(
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
-
     private readonly youtubeService: YoutubeService,
     private readonly playQueueService: PlayQueueService,
     private readonly discordMessageService: DiscordMessageService,
     private readonly discordGuildService: DiscordGuildService,
+    private readonly dbService: DbService,
   ) {}
 
   public async sendCurrentTrackDetails({
@@ -47,13 +43,7 @@ export class DiscordPlayerMessageService {
   }
 
   public async get(guildId: string): Promise<string | null> {
-    const playerMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
-
-    if (playerMessagesIds && playerMessagesIds[guildId]) {
-      return playerMessagesIds[guildId];
-    }
-
-    return null;
+    return (await this.dbService.guild.findUnique({ where: { id: guildId } }))?.activeMessageId;
   }
 
   /**
@@ -77,15 +67,7 @@ export class DiscordPlayerMessageService {
   }
 
   public async delete(guildId: string): Promise<void> {
-    const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string>>(PLAYER_MESSAGES_IDS_KEY);
-
-    if (!allPlayersMessagesIds?.[guildId]) {
-      return;
-    }
-
-    delete allPlayersMessagesIds[guildId];
-
-    await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, allPlayersMessagesIds);
+    await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId: null } });
   }
 
   public async getPlayerMessagePayload(guildId: string): Promise<MessagePayload | MessageCreateOptions> {
@@ -172,12 +154,8 @@ export class DiscordPlayerMessageService {
         ? await interaction.reply(message as InteractionReplyOptions)
         : await (await this.discordMessageService.getActiveTextChannel(userId))?.send(message);
       const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
-
-      const allPlayersMessagesIds = await this.cacheManager.get<Record<string, string> | null>(PLAYER_MESSAGES_IDS_KEY);
-      await this.cacheManager.set(PLAYER_MESSAGES_IDS_KEY, {
-        ...(allPlayersMessagesIds ?? {}),
-        [guildId]: (await newMessage?.fetch())?.id,
-      });
+      const activeMessageId = (await newMessage?.fetch())?.id;
+      await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId } });
     } catch (e) {
       this.logger.error('Failed to reply to interaction and save message id.', e);
       return null;

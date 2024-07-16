@@ -62,14 +62,14 @@ export class DiscordAudioService {
       this.discordPlayerMessageService.delete(guildId);
       this.playQueueService.destroyQueue(guildId);
     });
-    connection.on(VoiceConnectionStatus.Disconnected, () => {
-      this.playQueueService.destroyQueue(guildId);
-      this.discordPlayerMessageService.delete(guildId);
-    });
-    connection.on(VoiceConnectionStatus.Destroyed, () => {
-      this.playQueueService.destroyQueue(guildId);
-      this.discordPlayerMessageService.delete(guildId);
-    });
+    // connection.on(VoiceConnectionStatus.Disconnected, () => {
+    // this.playQueueService.destroyQueue(guildId);
+    // this.discordPlayerMessageService.delete(guildId);
+    // });
+    // connection.on(VoiceConnectionStatus.Destroyed, () => {
+    // this.playQueueService.destroyQueue(guildId);
+    // this.discordPlayerMessageService.delete(guildId);
+    // });
   }
 
   public pauseOrPlayAudio(interaction: ButtonInteraction): void {
