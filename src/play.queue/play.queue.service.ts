@@ -1,45 +1,40 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import { Injectable, Logger } from '@nestjs/common';
 
-import { GuildPlayQueue, PlayQueueItem } from 'src/play.queue/types';
-
-const PLAY_QUEUE_REDIS_KEY = 'play-queue';
+import { DbService } from 'src/db/db.service';
+import { PlayQueueType } from './types';
+import { PlayQueueDto } from './dto/play.queue.dto';
+import { validate } from 'class-validator';
 
 @Injectable()
 export class PlayQueueService {
-  constructor(@Inject(CACHE_MANAGER) private readonly cacheManager: Cache) {}
+  private readonly logger = new Logger(PlayQueueService.name);
 
-  public async getQueue(guildId: string): Promise<PlayQueueItem[] | null> {
-    const guildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
+  constructor(private readonly dbService: DbService) {}
 
-    if (!guildsPlayQueues) {
-      return null;
+  public async getOrCreatePlayQueue(guildId: string): Promise<PlayQueue> {
+    const playQueue = await this.dbService.playQueue.findUnique({ where: { guildId } });
+    if (playQueue) {
+      return playQueue;
     }
 
-    return guildsPlayQueues[guildId] ?? null;
+    return await this.dbService.playQueue.create({ data: { guildId, queue: [] } });
   }
 
-  public async getCurrentItem(guildId: string): Promise<PlayQueueItem | null> {
-    const queue = await this.getQueue(guildId);
-    if (!queue || !queue.length) {
-      return null;
-    }
+  public async getCurrentItem(guildId: string): Promise<PlayQueueType[number]> {
+    const { queue } = await this.getOrCreatePlayQueue(guildId);
 
     return queue.filter((item) => item.alreadyPlayed).at(-1);
   }
 
   public async pushToQueue({ guildId, urls }: { guildId: string; urls: string[] | string }): Promise<void> {
-    const queueItems = (Array.isArray(urls) ? urls : [urls]).map<PlayQueueItem>((url) => ({
+    const queueItems = (Array.isArray(urls) ? urls : [urls]).map<PlayQueueType[number]>((url) => ({
       url,
       alreadyPlayed: false,
     }));
-
-    const existingQueue = await this.getQueue(guildId);
-
+    const { queue: existingQueue } = await this.getOrCreatePlayQueue(guildId);
     const updatedQueue = existingQueue ? [...existingQueue, ...queueItems] : queueItems;
 
-    await this.updateQueueForGuild(guildId, updatedQueue);
+    await this.updateQueue(guildId, updatedQueue);
   }
 
   public async getNextItem({
@@ -48,12 +43,8 @@ export class PlayQueueService {
   }: {
     guildId: string;
     markCurrentAsPlayed?: boolean;
-  }): Promise<PlayQueueItem | null> {
-    const queue = await this.getQueue(guildId);
-    if (!queue) {
-      return null;
-    }
-
+  }): Promise<PlayQueueType[number]> {
+    const { queue: queue } = await this.getOrCreatePlayQueue(guildId);
     const nextItemIndex = queue.findIndex((item) => !item.alreadyPlayed);
 
     if (nextItemIndex === -1) {
@@ -64,16 +55,14 @@ export class PlayQueueService {
       ...item,
       alreadyPlayed: markCurrentAsPlayed ? i <= nextItemIndex : i < nextItemIndex,
     }));
-
     const nextItem = queue[nextItemIndex];
-
-    await this.updateQueueForGuild(guildId, updatedQueue);
+    await this.updateQueue(guildId, updatedQueue);
 
     return nextItem;
   }
 
-  public async getPrevItem(guildId: string): Promise<PlayQueueItem | null> {
-    const queue = await this.getQueue(guildId);
+  public async getPrevItem(guildId: string): Promise<PlayQueueType[number]> {
+    const { queue } = await this.getOrCreatePlayQueue(guildId);
     if (!queue) {
       return null;
     }
@@ -93,45 +82,32 @@ export class PlayQueueService {
     }));
     const prevItem = queue[prevItemIndex];
 
-    await this.updateQueueForGuild(guildId, updatedQueue);
+    await this.updateQueue(guildId, updatedQueue);
 
     return prevItem;
   }
 
   public async destroyQueue(guildId: string): Promise<void> {
-    const allGuildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
-
-    if (!allGuildsPlayQueues) {
-      return;
+    try {
+      const queueExists = await this.dbService.playQueue.findUnique({ where: { guildId } });
+      if (!queueExists) {
+        return;
+      }
+      await this.dbService.playQueue.delete({ where: { guildId } });
+    } catch (e) {
+      // TODO add Sentry loggin
+      this.logger.error('Failed to destroy the existing queue', e);
     }
-
-    delete allGuildsPlayQueues[guildId];
-
-    await this.cacheManager.set(PLAY_QUEUE_REDIS_KEY, allGuildsPlayQueues);
   }
 
-  public async markAsPlayed(guildId: string, url: string): Promise<void> {
-    const queue = await this.getQueue(guildId);
-    if (!queue) {
-      return;
+  private async updateQueue(guildId: string, updatedQueue: PlayQueueType): Promise<PlayQueue> {
+    const queueDto = new PlayQueueDto();
+    queueDto.queue = updatedQueue;
+    const validationErrors = await validate(queueDto);
+    if (validationErrors.length) {
+      throw new Error('Failed to validate the play queue');
     }
-
-    const updatedQueue = queue.map((item) => ({
-      ...item,
-      alreadyPlayed: item.url === url || item.alreadyPlayed,
-    }));
-
-    await this.updateQueueForGuild(guildId, updatedQueue);
-  }
-
-  private async updateQueueForGuild(guildId: string, updatedQueue: PlayQueueItem[]): Promise<void> {
-    const allGuildsPlayQueues = await this.cacheManager.get<GuildPlayQueue | null>(PLAY_QUEUE_REDIS_KEY);
-
-    const updatedGuildsPlayQueues = {
-      ...(allGuildsPlayQueues ?? {}),
-      [guildId]: updatedQueue,
-    };
-
-    await this.cacheManager.set(PLAY_QUEUE_REDIS_KEY, updatedGuildsPlayQueues);
+    const { id: queueId } = await this.getOrCreatePlayQueue(guildId);
+    return await this.dbService.playQueue.update({ where: { id: queueId }, data: { queue: updatedQueue } });
   }
 }

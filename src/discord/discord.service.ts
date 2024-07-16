@@ -34,9 +34,14 @@ export class DiscordService {
     });
 
     // Handle interactions
-    this.discordClientService.client.on('interactionCreate', (i) =>
-      this.discordInteractionHandlerService.handleInteraction(i),
-    );
+    this.discordClientService.client.on('interactionCreate', (i) => {
+      try {
+        this.discordInteractionHandlerService.handleInteraction(i);
+      } catch (e) {
+        // TODO add Sentry loggin
+        this.logger.error('Failed to handle the interaction', e);
+      }
+    });
 
     // Login
     this.discordClientService.client.login(this.configService.get<string>('discord.token'));

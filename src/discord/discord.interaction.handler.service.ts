@@ -155,7 +155,7 @@ export class DiscordInteractionHandlerService {
     });
 
     const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId)).id;
-    const hasItemsInQueue = Boolean(await this.playQueueService.getQueue(guildId));
+    const hasItemsInQueue = Boolean((await this.playQueueService.getOrCreatePlayQueue(guildId)).queue.length);
 
     if (isPlaylist) {
       await this.pushPlaylistToQueue({
@@ -293,7 +293,9 @@ export class DiscordInteractionHandlerService {
   }
 
   private async updateActiveGuildBasedOnInteraction(interaction: Interaction): Promise<void> {
-    const tuenVaultGuild = await this.discordGuildService.find(interaction.guild.id);
+    const tuenVaultGuild =
+      (await this.discordGuildService.find(interaction.guild.id)) ??
+      (await this.discordGuildService.upsert(interaction.guild));
     const activeChannelAlreadySet = tuenVaultGuild.activeChannelId === interaction.channel.id;
 
     if (!activeChannelAlreadySet) {

@@ -14,6 +14,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Always after the prisma-client-js generator
+generator json {
+  provider = "prisma-json-types-generator"
+}
+
 model Guild {
   // Values from Discord
   id       String   @id
@@ -24,6 +29,17 @@ model Guild {
   // Application specific values
   activeUsers     User[]
   activeChannelId String?
+  playQueueId     Int?
+  playQueue       PlayQueue?
+  activeMessageId String?
+}
+
+model PlayQueue {
+  id      Int     @id @default(autoincrement())
+  guildId String? @unique
+  guild   Guild?  @relation(fields: [guildId], references: [id])
+  /// [PlayQueueType]
+  queue   Json    @default("[]")
 }
 
 model User {

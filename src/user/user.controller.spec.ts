@@ -15,8 +15,8 @@ describe('UserController', () => {
 
     controller = module.get<UserController>(UserController);
   });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
+  imports: [DbModule],
+    it('should be defined', () => {
+      expect(controller).toBeDefined();
+    });
 });
