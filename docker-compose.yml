@@ -9,17 +9,9 @@ services:
     ports:
       - '3000:3000'
     networks:
-      - redis
+      - postgres
     depends_on:
-      - redis
-
-  redis:
-    image: redis:alpine
-    container_name: redis
-    ports:
-      - '6379:6379'
-    networks:
-      - redis
+      - postgres
 
   postgres:
     image: postgres:16.3
@@ -34,7 +26,5 @@ services:
       - postgres
 
 networks:
-  redis:
-    driver: bridge
   postgres:
     driver: bridge

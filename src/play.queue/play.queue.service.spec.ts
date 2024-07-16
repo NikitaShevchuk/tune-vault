@@ -1,8 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CacheModule } from '@nestjs/cache-manager';
 
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
-import { redisOptions } from 'src/db/redis-options';
 import { DbModule } from 'src/db/db.module';
 import { DbService } from 'src/db/db.service';
 import { TestDbService } from 'src/global/tests/db/test.db.service';
@@ -16,7 +14,7 @@ describe('PlayQueueService', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [PlayQueueService, DbService],
-      imports: [DbModule, CacheModule.registerAsync(redisOptions), TestDbModule],
+      imports: [DbModule, TestDbModule],
     }).compile();
 
     service = module.get<PlayQueueService>(PlayQueueService);

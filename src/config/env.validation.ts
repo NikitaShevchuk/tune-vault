@@ -1,5 +1,5 @@
 import { Transform, plainToInstance } from 'class-transformer';
-import { IsEnum, IsNumber, IsOptional, IsString, validateSync } from 'class-validator';
+import { IsEnum, IsNumber, IsString, validateSync } from 'class-validator';
 
 export enum AppEnv {
   development = 'development',
@@ -41,12 +41,6 @@ class EnvironmentVariables {
   DISCORD_REDIRECT_URL: string;
   @IsString()
   DISCORD_CLIENT_SECRET: string;
-
-  // Redis
-  @IsString()
-  REDIS_HOST: string;
-  @IsNumber()
-  REDIS_PORT: number;
 
   // Extension
   @IsString()

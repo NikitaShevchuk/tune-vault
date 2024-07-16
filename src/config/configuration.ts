@@ -17,10 +17,6 @@ const getConfig = () =>
       redirectUrl: process.env.DISCORD_REDIRECT_URL,
       clientSecret: process.env.DISCORD_CLIENT_SECRET,
     },
-    redis: {
-      host: process.env.REDIS_HOST,
-      port: parseInt(process.env.REDIS_PORT, 10) || 6379,
-    },
     postgres: {
       username: process.env.POSTGRES_USER,
       password: process.env.POSTGRES_PASSWORD,
