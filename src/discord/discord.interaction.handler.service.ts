@@ -305,7 +305,9 @@ export class DiscordInteractionHandlerService {
       });
     }
 
-    const user = await this.userService.findOne(interaction.user.id);
+    const user =
+      (await this.userService.findOne(interaction.user.id)) ??
+      (await this.userService.upsertUserFromDiscord(interaction.user));
     const activeGuildAlreadySet = user.activeGuildId === interaction.guild.id;
 
     if (!activeGuildAlreadySet) {

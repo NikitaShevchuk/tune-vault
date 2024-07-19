@@ -1,3 +1,5 @@
+export ERC_HOST := "817545410935.dkr.ecr.us-east-1.amazonaws.com"
+
 warn-if-git-diff:
     #!/usr/bin/env bash
     set -e
@@ -13,6 +15,15 @@ warn-if-git-diff:
         fi
     fi
 
+ecr_login:
+    #!/usr/bin/env bash
+    set -e
+    set -o pipefail
+    unset AWS_ACCESS_KEY_ID
+    unset AWS_SECRET_ACCESS_KEY
+    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ECR_HOST}
+    
+# (ecr_login)
 build: (warn-if-git-diff)
     #!/usr/bin/env bash
     set -e
