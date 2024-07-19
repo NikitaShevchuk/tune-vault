@@ -5,7 +5,6 @@ import { AppModule } from 'src/app.module';
 import { DiscordService } from 'src/discord/discord.service';
 import { PrismaClientExceptionFilter } from 'src/db/prisma-client-exception.filter';
 import { Configuration } from 'src/config/configuration';
-import { AppEnv } from 'src/config/env.validation';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

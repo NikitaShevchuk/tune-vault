@@ -27,7 +27,7 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose the port on which the application will run
-EXPOSE $PORT
+EXPOSE 3000 
 
 # Apply migrations
 ENTRYPOINT ["/app/migrate.sh"]

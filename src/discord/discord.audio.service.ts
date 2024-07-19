@@ -111,27 +111,14 @@ export class DiscordAudioService {
     const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
     const connection = getVoiceConnection(guildId);
     connection?.destroy();
+
     this.discordMessageService.replyAndDeleteAfterDelay({
       interaction,
       message: 'Disconnected from the voice channel',
       userId,
     });
+
     this.playQueueService.destroyQueue(guildId);
-
-    const currentPlayerMessageId = await this.discordPlayerMessageService.get(guildId);
-
-    if (currentPlayerMessageId) {
-      try {
-        if (interaction) {
-          interaction.channel.messages.delete(currentPlayerMessageId);
-        } else {
-          const channel = await this.discordMessageService.getActiveTextChannel(userId);
-          channel?.messages?.delete(currentPlayerMessageId);
-        }
-      } catch (e) {
-        this.logger.error('Failed to delete the current player message', e);
-      }
-    }
     this.discordPlayerMessageService.delete(guildId);
   }
 
