@@ -14,9 +14,7 @@ import { Request } from 'express';
 
 import { PlayDto } from 'src/discord/dto';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
-import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { UserRoles } from 'src/auth/types';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.auth.guard';
 import { Guild as TuneVaultGuild } from '@prisma/client';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
@@ -41,7 +39,6 @@ export class DiscordController {
 
   @Post('play')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRoles.admin)
   public async play(@Req() request: Request, @Body() { url }: PlayDto): Promise<void> {
     try {
       const user = await this.userService.findOne(request.user.id);

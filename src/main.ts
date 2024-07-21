@@ -20,8 +20,8 @@ async function bootstrap() {
   // Cors
   const configService = app.get<ConfigService<Configuration, true>>(ConfigService);
   const frontendUrl = configService.get('uiUrl', { infer: true });
-  const extensionId = configService.get('extension.id', { infer: true });
-  const chromeExtension = `chrome-extension://${extensionId}`;
+  // const extensionId = configService.get('extension.id', { infer: true });
+  const chromeExtension = `chrome-extension://.*`;
   const origin = [frontendUrl, chromeExtension];
   app.enableCors({ origin });
 
