@@ -1,4 +1,4 @@
-export ERC_HOST := "817545410935.dkr.ecr.us-east-1.amazonaws.com"
+export ECR_HOST := "817545410935.dkr.ecr.us-east-1.amazonaws.com"
 
 warn-if-git-diff:
     #!/usr/bin/env bash
@@ -21,10 +21,10 @@ ecr_login:
     set -o pipefail
     unset AWS_ACCESS_KEY_ID
     unset AWS_SECRET_ACCESS_KEY
-    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${ECR_HOST}
+    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${ECR_HOST}"
     
 # (ecr_login)
-build: (warn-if-git-diff)
+build: (warn-if-git-diff) (ecr_login)
     #!/usr/bin/env bash
     set -e
     set -o pipefail
@@ -34,7 +34,8 @@ build: (warn-if-git-diff)
     GIT_COMMIT_HASH=$(git rev-parse --short HEAD)
     docker build --build-arg="LOCAL=false" --build-arg="GIT_COMMIT_HASH=${GIT_COMMIT_HASH}" --progress=plain -t ${IMAGE_NAME}:${GIT_COMMIT_HASH} .
 
-    IMAGE_URI=${ECR_HOST}/${IMAGE_NAME}:${GIT_COMMIT_HASH}
+    # IMAGE_URI=${ECR_HOST}/${IMAGE_NAME}:${GIT_COMMIT_HASH}
+    IMAGE_URI=${ECR_HOST}/${IMAGE_NAME}:latest
     #! IMAGE_URI_BRANCH=${ECR_HOST}/${IMAGE_NAME}:prod
 
     echo "Tagging ${IMAGE_NAME}:${GIT_COMMIT_HASH} as:\n - ${IMAGE_URI}\n - ${IMAGE_URI_BRANCH}"
@@ -43,3 +44,12 @@ build: (warn-if-git-diff)
     #! docker tag ${IMAGE_NAME}:${GIT_COMMIT_HASH} ${IMAGE_URI_BRANCH}
     docker push ${IMAGE_URI}
     #! docker push ${IMAGE_URI_BRANCH}
+
+update-and-restart: (ecr_login)
+    #!/usr/bin/env bash
+    set -e
+    set -o pipefail
+    unset AWS_ACCESS_KEY_ID
+    unset AWS_SECRET_ACCESS_KEY
+    aws ecs update-service --cluster "tune-vault" --service "tune-vault-service" --force-new-deployment
+
