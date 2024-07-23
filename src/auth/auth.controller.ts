@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Request, Response } from 'express';
+import { CookieOptions, Request, Response } from 'express';
 
 import { Transformers } from 'src/utils/transformers';
 import { AuthService } from 'src/auth/auth.service';
@@ -27,15 +27,22 @@ export class AuthController {
     await this.userService.upsertUserFromDiscord(Transformers.snakeCaseToCamelCase(req.user));
 
     const jwt = await this.authService.generateJwt(req.user);
-    const isProduction = this.configService.get('environment') === 'production';
-    res.cookie('token', jwt.access_token, { secure: isProduction });
+    const uiUrl = this.configService.get('uiUrl');
+    const cookie10DaysMaxAge = 864_000_000;
 
+    const cookieOptions: CookieOptions = {
+      secure: true,
+      path: '/',
+      sameSite: 'none',
+      maxAge: cookie10DaysMaxAge,
+    };
+    res.cookie('token', jwt.access_token, cookieOptions);
     // The instance of user here comes from the passport strategy, which is not the same as the user in the database
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    res.cookie('discord-token', req.user.accessToken, { secure: isProduction });
+    res.cookie('discord-token', req.user.accessToken, cookieOptions);
 
-    return res.redirect(`${this.configService.get('uiUrl')}/after-auth`);
+    return res.redirect(`${uiUrl}/after-auth`);
   }
 
   @Get('logout')
