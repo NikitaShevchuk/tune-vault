@@ -28,6 +28,7 @@ export class AuthController {
 
     const jwt = await this.authService.generateJwt(req.user);
     const uiUrl = this.configService.get('uiUrl');
+    const uiHost = this.configService.get('uiHost');
     const cookie10DaysMaxAge = 864_000_000;
 
     const cookieOptions: CookieOptions = {
@@ -35,9 +36,7 @@ export class AuthController {
       path: '/',
       sameSite: 'none',
       maxAge: cookie10DaysMaxAge,
-      // Fronted and backend have different domains so it won't work for now
-      // const uiHost = this.configService.get('uiHost');
-      // domain: uiHost,
+      domain: `.${uiHost}`,
     };
     res.cookie('token', jwt.access_token, cookieOptions);
     // The instance of user here comes from the passport strategy, which is not the same as the user in the database
