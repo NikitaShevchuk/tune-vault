@@ -13,8 +13,6 @@ RUN npm install
 
 # Bundle app source
 COPY . .
-# Cpoy the .env file
-COPY .env.prod .env
 
 # Copy the script to apply migrations at etnrypoint
 COPY migrate.sh /app/migrate.sh
