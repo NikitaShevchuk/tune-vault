@@ -25,7 +25,7 @@ env:
 jobs:
   deploy:
     name: Deploy
-    runs-on: alpine-latest
+    runs-on: ubuntu-latest
     environment: production
 
     steps:
