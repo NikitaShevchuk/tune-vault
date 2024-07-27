@@ -32,6 +32,10 @@ export class UserService {
     });
   }
 
+  public async totalCount(): Promise<number> {
+    return this.dbService.user.count();
+  }
+
   public async upsertUserFromDiscord(user: User): Promise<TuneVaultUser> {
     return await this.dbService.user.upsert({
       create: {

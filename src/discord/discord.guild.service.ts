@@ -59,4 +59,8 @@ export class DiscordGuildService {
       },
     });
   }
+
+  public async totalCount(): Promise<number> {
+    return await this.dbService.guild.count();
+  }
 }

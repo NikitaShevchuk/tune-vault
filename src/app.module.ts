@@ -11,6 +11,7 @@ import { UserModule } from 'src/user/user.module';
 import { DiscordModule } from 'src/discord/discord.module';
 import { YoutubeModule } from 'src/youtube/youtube.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AuthModule } from 'src/auth/auth.module';
     DbModule,
     UserModule,
     AuthModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
