@@ -50,7 +50,13 @@ export class AuthController {
   @Get('logout')
   @UseGuards(JwtAuthGuard)
   public async logout(@Req() req: Request, @Res() res: Response) {
-    req.logout({ keepSessionInfo: false }, () => res.clearCookie('jwt'));
-    res.redirect(this.configService.get('uiUrl'));
+    const uiHost = this.configService.get('uiHost');
+
+    req.logout({ keepSessionInfo: false }, () =>
+      res.clearCookie('token', {
+        domain: `.${uiHost}`,
+      }),
+    );
+    res.status(204).end();
   }
 }
