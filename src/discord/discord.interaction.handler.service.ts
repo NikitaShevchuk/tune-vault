@@ -8,7 +8,7 @@ import { YoutubeService } from 'src/youtube/youtube.service';
 import { DiscordAudioService } from 'src/discord/discord.audio.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
-import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 import { UserService } from 'src/user/user.service';
 
 @Injectable()
@@ -259,7 +259,7 @@ export class DiscordInteractionHandlerService {
     if (hasItemsInQueue) {
       try {
         if (!interaction) {
-          const activeChannel = await this.discordMessageService.getActiveTextChannel(userId);
+          const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
           await activeChannel.send('Loading playlist details...');
         } else {
           await interaction.reply('Loading playlist details...');

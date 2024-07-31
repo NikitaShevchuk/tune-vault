@@ -8,13 +8,11 @@ import {
   EmbedBuilder,
   InteractionReplyOptions,
   MessageActionRowComponentBuilder,
-  TextChannel,
 } from 'discord.js';
 import { ConfigService } from '@nestjs/config';
 
 import { INTERACTION_REPLY_TIMEOUT_MS } from 'src/discord/constants';
 import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
-import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { Configuration } from 'src/config/configuration';
 
@@ -23,7 +21,6 @@ export class DiscordMessageService {
   private readonly logger = new Logger(DiscordMessageService.name);
 
   constructor(
-    private readonly discordClientService: DiscordClientService,
     private readonly discordGuildService: DiscordGuildService,
     private readonly configService: ConfigService<Configuration, true>,
   ) {}
@@ -41,7 +38,7 @@ export class DiscordMessageService {
     const payload = { embeds: [addedToQueueEmbedMessage] };
     try {
       if (!interaction) {
-        const activeChannel = await this.getActiveTextChannel(userId);
+        const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
         const message = await activeChannel.send(payload);
 
         if (shouldDeleteAfterDelay) {
@@ -80,7 +77,7 @@ export class DiscordMessageService {
   } & ReplyPayload<ChatInputCommandInteraction | ButtonInteraction>): Promise<void> {
     try {
       if (!interaction) {
-        const activeChannel = await this.getActiveTextChannel(userId);
+        const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
 
         if (!activeChannel) {
           return;
@@ -110,28 +107,5 @@ export class DiscordMessageService {
       .setURL(this.configService.get('authUrl', { infer: true }));
 
     return new ActionRowBuilder().addComponents(authButton) as ActionRowBuilder<MessageActionRowComponentBuilder>;
-  }
-
-  public async getActiveTextChannel(userId: string): Promise<TextChannel | null> {
-    const userActiveGuild = await this.discordGuildService.getActiveGuild(userId);
-    const guild = await this.discordClientService.client.guilds.fetch(userActiveGuild.id);
-
-    // Try to get the active channel saved in the database
-    if (userActiveGuild.activeChannelId) {
-      const channel = await guild.channels.fetch(userActiveGuild.activeChannelId);
-      if (!channel.isTextBased()) {
-        return null;
-      }
-      return channel as TextChannel;
-    }
-
-    // Fallback to the first text channel in the guild
-    const channels = await guild.channels.fetch();
-    const textChannel = channels.find((channel) => channel.isTextBased()) as TextChannel;
-    if (!textChannel) {
-      return null;
-    }
-    await this.discordGuildService.update({ ...userActiveGuild, activeChannelId: textChannel.id });
-    return textChannel;
   }
 }

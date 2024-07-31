@@ -1,12 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { Guild } from 'discord.js';
+import { Guild, TextChannel } from 'discord.js';
 import { DbService } from 'src/db/db.service';
 
 import { Guild as TuneVaultGuild } from '@prisma/client';
+import { DiscordClientService } from './discord.client.service';
 
 @Injectable()
 export class DiscordGuildService {
-  constructor(private readonly dbService: DbService) {}
+  constructor(
+    private readonly dbService: DbService,
+    private readonly discordClientService: DiscordClientService,
+  ) {}
 
   public async findMany(ids: string[]): Promise<TuneVaultGuild[]> {
     return await this.dbService.guild.findMany({ where: { id: { in: ids } } });
@@ -62,5 +66,28 @@ export class DiscordGuildService {
 
   public async totalCount(): Promise<number> {
     return await this.dbService.guild.count();
+  }
+
+  public async getActiveTextChannel(userId: string): Promise<TextChannel | null> {
+    const userActiveGuild = await this.getActiveGuild(userId);
+    const guild = await this.discordClientService.client.guilds.fetch(userActiveGuild.id);
+
+    // Try to get the active channel saved in the database
+    if (userActiveGuild.activeChannelId) {
+      const channel = await guild.channels.fetch(userActiveGuild.activeChannelId);
+      if (!channel.isTextBased()) {
+        return null;
+      }
+      return channel as TextChannel;
+    }
+
+    // Fallback to the first text channel in the guild
+    const channels = await guild.channels.fetch();
+    const textChannel = channels.find((channel) => channel.isTextBased()) as TextChannel;
+    if (!textChannel) {
+      return null;
+    }
+    await this.update({ ...userActiveGuild, activeChannelId: textChannel.id });
+    return textChannel;
   }
 }

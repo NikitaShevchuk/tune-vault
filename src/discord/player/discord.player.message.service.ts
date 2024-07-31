@@ -132,7 +132,7 @@ export class DiscordPlayerMessageService {
     try {
       const existingMessage = interaction
         ? await interaction.channel.messages.fetch(playerMessageId)
-        : await (await this.discordMessageService.getActiveTextChannel(userId)).messages.fetch(playerMessageId);
+        : await (await this.discordGuildService.getActiveTextChannel(userId)).messages.fetch(playerMessageId);
       if (existingMessage) {
         await existingMessage.edit(message as unknown as MessageEditOptions);
         return existingMessage;
@@ -152,7 +152,7 @@ export class DiscordPlayerMessageService {
     try {
       const newMessage = interaction
         ? await interaction.reply(message as InteractionReplyOptions)
-        : await (await this.discordMessageService.getActiveTextChannel(userId))?.send(message);
+        : await (await this.discordGuildService.getActiveTextChannel(userId))?.send(message);
       const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
       const activeMessageId = (await newMessage?.fetch())?.id;
       await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId } });

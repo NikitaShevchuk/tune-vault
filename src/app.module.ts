@@ -12,7 +12,6 @@ import { DiscordModule } from 'src/discord/discord.module';
 import { YoutubeModule } from 'src/youtube/youtube.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { SocketModule } from './socket/socket.module';
 import { SocketGateway } from './socket/socket.gateway';
 
 @Module({
@@ -25,7 +24,6 @@ import { SocketGateway } from './socket/socket.gateway';
     UserModule,
     AuthModule,
     AnalyticsModule,
-    SocketModule,
   ],
   controllers: [AppController],
   providers: [AppService, SocketGateway],

@@ -17,7 +17,7 @@ import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
-import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 
 @Injectable()
 export class DiscordAudioService {

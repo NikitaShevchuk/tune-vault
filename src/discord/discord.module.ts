@@ -12,7 +12,7 @@ import { DiscordController } from 'src/discord/discord.controller';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordInteractionHandlerService } from 'src/discord/discord.interaction.handler.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
-import { DiscordPlayerMessageService } from 'src/discord/discord.player.message.service';
+import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 import { DiscordService } from 'src/discord/discord.service';
 import { UserModule } from 'src/user/user.module';
 

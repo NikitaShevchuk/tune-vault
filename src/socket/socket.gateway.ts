@@ -34,7 +34,17 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
   }
 
   @SubscribeMessage(SocketEvents.PING)
-  public handleMessage(client: Socket, data: any) {
+  public handlePing(client: Socket, data: any) {
+    this.logger.log(`Message received from client id: ${client.id}`);
+    this.logger.debug(`Payload: ${data}`);
+    return {
+      event: SocketEvents.PONG,
+      data: 'Hello world!',
+    };
+  }
+
+  @SubscribeMessage(SocketEvents.PAUSE_OR_PLAY)
+  public handlePauseOrPlay(client: Socket, data: any) {
     this.logger.log(`Message received from client id: ${client.id}`);
     this.logger.debug(`Payload: ${data}`);
     return {
