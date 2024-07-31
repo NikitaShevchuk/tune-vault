@@ -5,6 +5,7 @@ export type Configuration = ReturnType<typeof getConfig>;
 const getConfig = () =>
   ({
     port: parseInt(process.env.PORT, 10) || 3000,
+    socketPort: parseInt(process.env.string),
     appEnv: process.env.APP_ENV as AppEnv,
     uiUrl: process.env.UI_URL,
     uiHost: process.env.UI_HOST,

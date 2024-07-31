@@ -13,6 +13,8 @@ class EnvironmentVariables {
   @Transform(({ value }) => parseInt(value))
   @IsNumber()
   PORT: number;
+  @IsNumber()
+  SOCKET_PORT: number;
   @IsString()
   UI_URL: string;
   @IsString()
