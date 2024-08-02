@@ -40,13 +40,6 @@ export const intents = [
   IntentsBitField.Flags.GuildVoiceStates,
 ];
 
-export enum ButtonIds {
-  PREVIOUS = 'previous',
-  PLAY_PAUSE = 'play-pause',
-  NEXT = 'next',
-  DISCONNECT = 'disconnect',
-}
-
 export const INTERACTION_REPLY_TIMEOUT_MS = 5_000;
 
 export const DISCORD_USER_URL = 'https://discord.com/api/users/@me';

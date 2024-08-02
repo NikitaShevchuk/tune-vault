@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
 
-import { ButtonIds, Commands, commands } from 'src/discord/constants';
+import { Commands, commands } from 'src/discord/constants';
 import { InteractionOrUserId } from 'src/discord/types';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
@@ -10,6 +10,7 @@ import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 import { UserService } from 'src/user/user.service';
+import { DiscordPlayerService } from 'src/discord/player/discord.player.service';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
@@ -23,54 +24,30 @@ export class DiscordInteractionHandlerService {
     private readonly discordMessageService: DiscordMessageService,
     private readonly discordGuildService: DiscordGuildService,
     private readonly userService: UserService,
+    private readonly discordPlayerService: DiscordPlayerService,
   ) {}
 
   public async playFromHttp({ url, userId }: { url: string; userId: string }): Promise<void> {
     this.play({ url, userId, interaction: undefined });
   }
 
-  public handleInteraction(interaction: Interaction): void {
+  public async handleInteraction(interaction: Interaction): Promise<void> {
     this.logger.log(
       `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}.`,
     );
-    this.updateActiveGuildBasedOnInteraction(interaction);
+    this.discordGuildService.updateActiveGuildBasedOnInteraction(interaction);
+    this.userService.updateActiveGuildIdBasedOnInteraction(interaction);
 
     if (interaction.isCommand()) {
-      this.handleCommandInteraction(interaction);
+      await this.handleCommandInteraction(interaction);
       return;
     }
     if (interaction.isButton()) {
-      this.handleButtonInteraction(interaction);
+      await this.discordPlayerService.changePlayerState(interaction.customId);
       return;
     }
 
     this.logger.error('Unknown interaction type.');
-  }
-
-  private handleButtonInteraction(interaction: Interaction): void {
-    if (!interaction.isButton()) {
-      return;
-    }
-
-    const buttonId = interaction.customId;
-
-    if (buttonId === ButtonIds.PREVIOUS) {
-      this.discordAudioService.playPrevTrack(interaction);
-    }
-    if (buttonId === ButtonIds.PLAY_PAUSE) {
-      this.discordAudioService.pauseOrPlayAudio(interaction);
-    }
-    if (buttonId === ButtonIds.NEXT) {
-      this.discordAudioService.playNextTrack({
-        interaction,
-        stopCurrent: true,
-        replyToInteraction: true,
-        userId: undefined,
-      });
-    }
-    if (buttonId === ButtonIds.DISCONNECT) {
-      this.discordAudioService.disconnectFromVoiceChannel({ interaction, userId: undefined });
-    }
   }
 
   private async handleCommandInteraction(interaction: Interaction): Promise<void> {
@@ -80,7 +57,7 @@ export class DiscordInteractionHandlerService {
 
     const isUnknownCommand = !commands.find(({ name }) => name === interaction.commandName);
     if (isUnknownCommand) {
-      this.discordMessageService.replyAndDeleteAfterDelay({
+      await this.discordMessageService.replyAndDeleteAfterDelay({
         interaction,
         message: 'Command not found',
         userId: undefined,
@@ -103,7 +80,7 @@ export class DiscordInteractionHandlerService {
         interaction,
         message: {
           components: [authButton],
-          content: 'Click the button below to authorize the bot. This link will expire in 1 minute.',
+          content: 'Click the button below to authorize the bot.',
         },
         delayMs: 60_000, // 1 minute
         userId: undefined,
@@ -290,30 +267,5 @@ export class DiscordInteractionHandlerService {
       shouldDeleteAfterDelay: hasItemsInQueue,
       userId,
     });
-  }
-
-  private async updateActiveGuildBasedOnInteraction(interaction: Interaction): Promise<void> {
-    const tuenVaultGuild =
-      (await this.discordGuildService.find(interaction.guild.id)) ??
-      (await this.discordGuildService.upsert(interaction.guild));
-    const activeChannelAlreadySet = tuenVaultGuild.activeChannelId === interaction.channel.id;
-
-    if (!activeChannelAlreadySet) {
-      await this.discordGuildService.update({
-        id: interaction.guild.id,
-        activeChannelId: interaction.channel.id,
-      });
-    }
-
-    const user =
-      (await this.userService.findOne(interaction.user.id)) ??
-      (await this.userService.upsertUserFromDiscord(interaction.user));
-    const activeGuildAlreadySet = user.activeGuildId === interaction.guild.id;
-
-    if (!activeGuildAlreadySet) {
-      await this.userService.update(user.id, {
-        activeGuildId: interaction.guild.id,
-      });
-    }
   }
 }

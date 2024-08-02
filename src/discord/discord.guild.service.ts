@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Guild, TextChannel } from 'discord.js';
+import { Guild, Interaction, TextChannel } from 'discord.js';
 import { DbService } from 'src/db/db.service';
 
 import { Guild as TuneVaultGuild } from '@prisma/client';
 import { DiscordClientService } from './discord.client.service';
+import { InteractionOrUserId } from './types';
 
 @Injectable()
 export class DiscordGuildService {
@@ -90,4 +91,18 @@ export class DiscordGuildService {
     await this.update({ ...userActiveGuild, activeChannelId: textChannel.id });
     return textChannel;
   }
+
+  public async updateActiveGuildBasedOnInteraction(interaction: Interaction): Promise<void> {
+    const tuenVaultGuild = (await this.find(interaction.guild.id)) ?? (await this.upsert(interaction.guild));
+    const activeChannelAlreadySet = tuenVaultGuild.activeChannelId === interaction.channel.id;
+
+    if (!activeChannelAlreadySet) {
+      await this.update({
+        id: interaction.guild.id,
+        activeChannelId: interaction.channel.id,
+      });
+    }
+  }
+
+  public async getActiveGuildId({ userId, interaction }: InteractionOrUserId) {}
 }

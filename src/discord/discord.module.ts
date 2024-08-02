@@ -15,6 +15,7 @@ import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 import { DiscordService } from 'src/discord/discord.service';
 import { UserModule } from 'src/user/user.module';
+import { DiscordPlayerService } from 'src/discord/player/discord.player.service';
 
 @Module({
   providers: [
@@ -27,6 +28,7 @@ import { UserModule } from 'src/user/user.module';
     DiscordMessageService,
     DiscordClientService,
     DiscordGuildService,
+    DiscordPlayerService,
   ],
   imports: [YoutubeModule, PlayQueueModule, ConfigModule, HttpModule, UserModule],
   controllers: [DiscordController],

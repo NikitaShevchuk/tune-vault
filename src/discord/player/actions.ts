@@ -1,0 +1,7 @@
+export enum PlayerActions {
+  PLAY_NEXT = 'PLAY_NEXT',
+  PLAY_PREV = 'PLAY_PREV',
+
+  PAUSE_OR_PLAY = 'PAUSE_OR_PLAY',
+  DISCONNECT_BOT = 'DISCONNECT_BOT',
+}

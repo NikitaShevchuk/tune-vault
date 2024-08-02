@@ -13,13 +13,12 @@ import {
   MessagePayload,
 } from 'discord.js';
 
-import { ButtonIds } from 'src/discord/constants';
 import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
-import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { DbService } from 'src/db/db.service';
+import { PlayerActions } from './actions';
 
 @Injectable()
 export class DiscordPlayerMessageService {
@@ -28,7 +27,6 @@ export class DiscordPlayerMessageService {
   constructor(
     private readonly youtubeService: YoutubeService,
     private readonly playQueueService: PlayQueueService,
-    private readonly discordMessageService: DiscordMessageService,
     private readonly discordGuildService: DiscordGuildService,
     private readonly dbService: DbService,
   ) {}
@@ -95,23 +93,23 @@ export class DiscordPlayerMessageService {
 
   private getActionRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
     const prevButton = new ButtonBuilder()
-      .setCustomId(ButtonIds.PREVIOUS)
+      .setCustomId(PlayerActions.PLAY_PREV)
       .setEmoji('⏮')
       .setStyle(ButtonStyle.Secondary);
 
     const playButton = new ButtonBuilder()
-      .setCustomId(ButtonIds.PLAY_PAUSE)
+      .setCustomId(PlayerActions.PAUSE_OR_PLAY)
       .setEmoji('⏯')
       .setStyle(ButtonStyle.Secondary);
 
     const nextButton = new ButtonBuilder()
-      .setCustomId(ButtonIds.NEXT)
+      .setCustomId(PlayerActions.PLAY_NEXT)
       .setEmoji('⏭')
 
       .setStyle(ButtonStyle.Secondary);
 
     const disconnectButton = new ButtonBuilder()
-      .setCustomId(ButtonIds.DISCONNECT)
+      .setCustomId(PlayerActions.DISCONNECT_BOT)
       .setEmoji('⛔')
       .setStyle(ButtonStyle.Secondary);
 

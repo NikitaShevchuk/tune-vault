@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { UpdateUserDto } from 'src/user/dto/update-user.dto';
 import { DbService } from 'src/db/db.service';
 import { User as TuneVaultUser } from '@prisma/client';
-import { User } from 'discord.js';
+import { Interaction, User } from 'discord.js';
 
 @Injectable()
 export class UserService {
@@ -56,5 +56,16 @@ export class UserService {
         id: user.id,
       },
     });
+  }
+
+  public async updateActiveGuildIdBasedOnInteraction(interaction: Interaction): Promise<void> {
+    const user = (await this.findOne(interaction.user.id)) ?? (await this.upsertUserFromDiscord(interaction.user));
+    const activeGuildAlreadySet = user.activeGuildId === interaction.guild.id;
+
+    if (!activeGuildAlreadySet) {
+      await this.update(user.id, {
+        activeGuildId: interaction.guild.id,
+      });
+    }
   }
 }

@@ -166,7 +166,7 @@ export class DiscordAudioService {
     player.play(resource);
   }
 
-  public async playPrevTrack(interaction: ButtonInteraction): Promise<void> {
+  public async playPrevTrack({ interaction, userId }: InteractionOrUserId<ButtonInteraction>): Promise<void> {
     const player = this.playerByGuildId.get(interaction.guild.id);
     const prevItem = await this.playQueueService.getPrevItem(interaction.guild.id);
 
@@ -174,7 +174,7 @@ export class DiscordAudioService {
       this.discordMessageService.replyAndDeleteAfterDelay({
         message: 'No items in the queue',
         interaction,
-        userId: undefined,
+        userId,
       });
       return;
     }

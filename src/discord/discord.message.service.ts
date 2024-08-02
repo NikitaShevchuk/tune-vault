@@ -7,6 +7,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   InteractionReplyOptions,
+  Message,
   MessageActionRowComponentBuilder,
 } from 'discord.js';
 import { ConfigService } from '@nestjs/config';
@@ -63,7 +64,6 @@ export class DiscordMessageService {
   }
 
   /**
-   * Reply to an interaction or create a new message and delete the reply after a delay.
    * Either `interaction`  or `userId` must be provided.
    * We need this because we have 2 options to play a track: either from a command or from an endpoint (request from the Chrome extension).
    */
@@ -75,25 +75,41 @@ export class DiscordMessageService {
   }: {
     delayMs?: number;
   } & ReplyPayload<ChatInputCommandInteraction | ButtonInteraction>): Promise<void> {
+    const { newMessage } = await this.reply({ interaction, message, userId });
+    const deleteMessage = async () => {
+      if (newMessage) {
+        return await newMessage.delete();
+      } else if (interaction) {
+        return await interaction.deleteReply();
+      }
+    };
+
+    setTimeout(async () => {
+      try {
+        await deleteMessage();
+      } catch (e) {
+        // TODO: Add sentry logging
+        this.logger.error('Failed to delete message', e);
+      }
+    }, delayMs);
+  }
+
+  /**
+   * Either `interaction`  or `userId` must be provided.
+   * We need this because we have 2 options to play a track: either from a command or from an endpoint (request from the Chrome extension).
+   */
+  public async reply({
+    interaction,
+    message,
+    userId,
+  }: ReplyPayload<ChatInputCommandInteraction | ButtonInteraction>): Promise<{
+    newMessage: Message | null;
+  }> {
     try {
       if (!interaction) {
-        const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
-
-        if (!activeChannel) {
-          return;
-        }
-
-        const newMessage = await activeChannel.send(message);
-        setTimeout(() => newMessage.delete(), delayMs);
-        return;
+        return await this.createNewMessage({ userId, message });
       }
-
-      if (interaction.replied) {
-        await interaction.editReply(message);
-      } else {
-        await interaction.reply(message as InteractionReplyOptions);
-      }
-      setTimeout(() => interaction.deleteReply(), delayMs);
+      return await this.replyToInteraction({ interaction, message });
     } catch (e) {
       // TODO: Add sentry logging
       this.logger.error('Failed to reply to an interaction', e);
@@ -107,5 +123,36 @@ export class DiscordMessageService {
       .setURL(this.configService.get('authUrl', { infer: true }));
 
     return new ActionRowBuilder().addComponents(authButton) as ActionRowBuilder<MessageActionRowComponentBuilder>;
+  }
+
+  private async replyToInteraction({
+    message,
+    interaction,
+  }: {
+    interaction: ButtonInteraction | ChatInputCommandInteraction;
+    message: ReplyPayload['message'];
+  }): Promise<{ newMessage: null }> {
+    if (interaction.replied) {
+      await interaction.editReply(message);
+    } else {
+      await interaction.reply(message as InteractionReplyOptions);
+    }
+    return { newMessage: null };
+  }
+
+  private async createNewMessage({
+    message,
+    userId,
+  }: {
+    message: ReplyPayload['message'];
+    userId: string;
+  }): Promise<{ newMessage: Message }> {
+    const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
+    if (!activeChannel) {
+      return;
+    }
+
+    const newMessage = await activeChannel.send(message);
+    return { newMessage };
   }
 }
