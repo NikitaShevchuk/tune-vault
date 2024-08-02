@@ -18,7 +18,7 @@ import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DbService } from 'src/db/db.service';
-import { PlayerActions } from './actions';
+import { PlayerEvents } from './actions';
 
 @Injectable()
 export class DiscordPlayerMessageService {
@@ -35,7 +35,7 @@ export class DiscordPlayerMessageService {
     interaction,
     userId,
   }: InteractionOrUserId<CommandInteraction | ButtonInteraction>): Promise<void> {
-    const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
     const message = await this.getPlayerMessagePayload(guildId);
     await this.editOrReply({ interaction, message, userId });
   }
@@ -53,7 +53,7 @@ export class DiscordPlayerMessageService {
   ): Promise<Message | null> {
     const { interaction, userId } = messageOptions;
 
-    const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
     const playerMessageId = await this.get(guildId);
 
     if (!playerMessageId) {
@@ -93,23 +93,23 @@ export class DiscordPlayerMessageService {
 
   private getActionRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
     const prevButton = new ButtonBuilder()
-      .setCustomId(PlayerActions.PLAY_PREV)
+      .setCustomId(PlayerEvents.PLAY_PREV)
       .setEmoji('⏮')
       .setStyle(ButtonStyle.Secondary);
 
     const playButton = new ButtonBuilder()
-      .setCustomId(PlayerActions.PAUSE_OR_PLAY)
+      .setCustomId(PlayerEvents.PAUSE_OR_PLAY)
       .setEmoji('⏯')
       .setStyle(ButtonStyle.Secondary);
 
     const nextButton = new ButtonBuilder()
-      .setCustomId(PlayerActions.PLAY_NEXT)
+      .setCustomId(PlayerEvents.PLAY_NEXT)
       .setEmoji('⏭')
 
       .setStyle(ButtonStyle.Secondary);
 
     const disconnectButton = new ButtonBuilder()
-      .setCustomId(PlayerActions.DISCONNECT_BOT)
+      .setCustomId(PlayerEvents.DISCONNECT_BOT)
       .setEmoji('⛔')
       .setStyle(ButtonStyle.Secondary);
 
@@ -151,7 +151,7 @@ export class DiscordPlayerMessageService {
       const newMessage = interaction
         ? await interaction.reply(message as InteractionReplyOptions)
         : await (await this.discordGuildService.getActiveTextChannel(userId))?.send(message);
-      const guildId = interaction ? interaction.guild.id : (await this.discordGuildService.getActiveGuild(userId))?.id;
+      const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
       const activeMessageId = (await newMessage?.fetch())?.id;
       await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId } });
     } catch (e) {

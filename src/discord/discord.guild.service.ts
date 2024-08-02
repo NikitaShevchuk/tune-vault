@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Guild, Interaction, TextChannel } from 'discord.js';
+import { ButtonInteraction, CommandInteraction, Guild, Interaction, TextChannel } from 'discord.js';
 import { DbService } from 'src/db/db.service';
 
 import { Guild as TuneVaultGuild } from '@prisma/client';
@@ -104,5 +104,7 @@ export class DiscordGuildService {
     }
   }
 
-  public async getActiveGuildId({ userId, interaction }: InteractionOrUserId) {}
+  public async getActiveGuildId({ userId, interaction }: InteractionOrUserId<ButtonInteraction | CommandInteraction>) {
+    return interaction ? interaction.guild.id : (await this.getActiveGuild(userId))?.id;
+  }
 }

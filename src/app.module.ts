@@ -12,7 +12,7 @@ import { DiscordModule } from 'src/discord/discord.module';
 import { YoutubeModule } from 'src/youtube/youtube.module';
 import { AuthModule } from 'src/auth/auth.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { SocketGateway } from './socket/socket.gateway';
+import { SocketModule } from './socket/socket.module';
 
 @Module({
   imports: [
@@ -24,8 +24,9 @@ import { SocketGateway } from './socket/socket.gateway';
     UserModule,
     AuthModule,
     AnalyticsModule,
+    SocketModule,
   ],
   controllers: [AppController],
-  providers: [AppService, SocketGateway],
+  providers: [AppService],
 })
 export class AppModule {}

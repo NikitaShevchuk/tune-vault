@@ -1,4 +1,4 @@
-export enum PlayerActions {
+export enum PlayerEvents {
   PLAY_NEXT = 'PLAY_NEXT',
   PLAY_PREV = 'PLAY_PREV',
 

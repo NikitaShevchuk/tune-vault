@@ -11,12 +11,16 @@ import { Server } from 'socket.io';
 import { Socket } from 'socket.io-client';
 
 import { SocketEvents } from 'src/socket/events';
+import { PlayerEvents } from 'src/discord/player/actions';
+import { DiscordPlayerService } from 'src/discord/player/discord.player.service';
 
-@WebSocketGateway()
+@WebSocketGateway(parseInt(process.env.SOCKET_PORT), { cors: { origin: process.env.UI_URL } })
 export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(SocketGateway.name);
 
   @WebSocketServer() io: Server;
+
+  constructor(private readonly discordPlayerService: DiscordPlayerService) {}
 
   public afterInit() {
     this.logger.log('Initialized');
@@ -43,13 +47,19 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     };
   }
 
-  @SubscribeMessage(SocketEvents.PAUSE_OR_PLAY)
-  public handlePauseOrPlay(client: Socket, data: any) {
+  @SubscribeMessage(PlayerEvents.PAUSE_OR_PLAY)
+  public async handlePauseOrPlay(client: Socket, data: any) {
     this.logger.log(`Message received from client id: ${client.id}`);
     this.logger.debug(`Payload: ${data}`);
+
+    await this.discordPlayerService.changePlayerState({
+      action: PlayerEvents.PAUSE_OR_PLAY,
+      userId: client.id,
+      interaction: undefined,
+    });
+
     return {
-      event: SocketEvents.PONG,
-      data: 'Hello world!',
+      event: SocketEvents.SUCCESS,
     };
   }
 }
