@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChatInputCommandInteraction, GuildMember, Interaction } from 'discord.js';
+import { ChatInputCommandInteraction, Interaction } from 'discord.js';
 
 import { Commands, commands } from 'src/discord/constants';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { UserService } from 'src/user/user.service';
 import { DiscordPlayerService } from 'src/discord/player/discord.player.service';
+import { InvalidLinkError, NotVoiceChannelMemberError } from './exceptions';
+import { DiscordPlayerMessageService } from './player/discord.player.message.service';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
@@ -16,6 +18,7 @@ export class DiscordInteractionHandlerService {
     private readonly discordGuildService: DiscordGuildService,
     private readonly userService: UserService,
     private readonly discordPlayerService: DiscordPlayerService,
+    private readonly discordPlayerMessageService: DiscordPlayerMessageService,
   ) {}
 
   public async handleInteraction(interaction: Interaction): Promise<void> {
@@ -26,19 +29,23 @@ export class DiscordInteractionHandlerService {
     this.userService.updateActiveGuildIdBasedOnInteraction(interaction);
 
     if (interaction.isCommand()) {
-      await this.handleCommandInteraction(interaction);
-      return;
+      return await this.handleCommandInteraction(interaction);
     }
     if (interaction.isButton()) {
-      await this.discordPlayerService.changePlayerState({
+      const message = await this.discordPlayerService.changePlayerState({
         action: interaction.customId,
+        guildId: interaction.guildId,
+      });
+
+      await this.discordMessageService.replyAndDeleteAfterDelay({
+        message,
         interaction,
-        userId: undefined,
+        guildId: interaction.guildId,
       });
       return;
     }
 
-    this.logger.error('Unknown interaction type.');
+    throw new Error('Unknown interaction type');
   }
 
   private async handleCommandInteraction(interaction: Interaction): Promise<void> {
@@ -51,7 +58,7 @@ export class DiscordInteractionHandlerService {
       await this.discordMessageService.replyAndDeleteAfterDelay({
         interaction,
         message: 'Command not found',
-        userId: undefined,
+        guildId: interaction.guildId,
       });
       return;
     }
@@ -61,7 +68,7 @@ export class DiscordInteractionHandlerService {
       await this.discordMessageService.replyAndDeleteAfterDelay({
         interaction,
         message: 'Commands refreshed',
-        userId: undefined,
+        guildId: interaction.guildId,
       });
     }
 
@@ -74,27 +81,58 @@ export class DiscordInteractionHandlerService {
           content: 'Click the button below to authorize the bot.',
         },
         delayMs: 60_000, // 1 minute
-        userId: undefined,
+        guildId: interaction.guildId,
       });
     }
 
     if ([Commands.PLAY, Commands.P].includes(interaction.commandName as Commands)) {
-      this.playFromInteraction(interaction);
+      await this.handlePlayCommand(interaction);
     }
   }
 
-  private async playFromInteraction(interaction: ChatInputCommandInteraction): Promise<void> {
-    const userInput = interaction.options.getString('link');
+  private async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+    await this.discordPlayerMessageService.editOrReply({
+      message: 'Loading details...',
+      interaction,
+      guildId: interaction.guildId,
+    });
 
-    if (!(interaction.member as GuildMember).voice.channel) {
-      await this.discordMessageService.replyAndDeleteAfterDelay({
+    try {
+      const message = await this.discordPlayerService.playFromInteraction(interaction);
+      if (message) {
+        await this.discordPlayerMessageService.editOrReply({
+          message,
+          interaction,
+          guildId: interaction.guildId,
+        });
+      }
+
+      const playerState = await this.discordPlayerService.getCurrentPlayerState(interaction.guildId);
+      await this.discordPlayerMessageService.sendCurrentTrackDetails({
         interaction,
-        message: '⛔ You must be in a voice channel to use this command',
-        userId: undefined,
+        guildId: interaction.guildId,
+        playerState,
       });
-      return;
-    }
+    } catch (e) {
+      if (e instanceof NotVoiceChannelMemberError) {
+        await this.discordMessageService.replyAndDeleteAfterDelay({
+          interaction,
+          message: '⛔ You must be in a voice channel to use this command',
+          guildId: interaction.guildId,
+        });
+        return;
+      }
 
-    await this.discordPlayerService.play({ interaction, url: userInput, userId: undefined });
+      if (e instanceof InvalidLinkError) {
+        await this.discordMessageService.replyAndDeleteAfterDelay({
+          message: '⛔ Invalid link',
+          interaction,
+          guildId: interaction.guildId,
+        });
+        return;
+      }
+
+      throw e;
+    }
   }
 }

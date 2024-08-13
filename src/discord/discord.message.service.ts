@@ -4,7 +4,7 @@ import {
   ButtonBuilder,
   ButtonInteraction,
   ButtonStyle,
-  ChatInputCommandInteraction,
+  CommandInteraction,
   EmbedBuilder,
   InteractionReplyOptions,
   Message,
@@ -13,7 +13,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 
 import { INTERACTION_REPLY_TIMEOUT_MS } from 'src/discord/constants';
-import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
+import { InteractionOrGuildId, ReplyPayload } from 'src/discord/types';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { Configuration } from 'src/config/configuration';
 
@@ -26,20 +26,20 @@ export class DiscordMessageService {
     private readonly configService: ConfigService<Configuration, true>,
   ) {}
 
-  public async displaySuccessMessage({
+  public async displayMessage({
     interaction,
-    successMessage,
+    message,
     shouldDeleteAfterDelay = true,
-    userId,
+    guildId,
   }: {
-    successMessage: string;
+    message: string;
     shouldDeleteAfterDelay?: boolean;
-  } & InteractionOrUserId<ChatInputCommandInteraction>): Promise<void> {
-    const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(successMessage);
+  } & InteractionOrGuildId): Promise<void> {
+    const addedToQueueEmbedMessage = new EmbedBuilder().setColor(0x57f287).setDescription(message);
     const payload = { embeds: [addedToQueueEmbedMessage] };
     try {
       if (!interaction) {
-        const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
+        const activeChannel = await this.discordGuildService.getActiveTextChannelByGuildId(guildId);
         const message = await activeChannel.send(payload);
 
         if (shouldDeleteAfterDelay) {
@@ -64,18 +64,18 @@ export class DiscordMessageService {
   }
 
   /**
-   * Either `interaction`  or `userId` must be provided.
+   * Either `interaction`  or `guildId` must be provided.
    * We need this because we have 2 options to play a track: either from a command or from an endpoint (request from the Chrome extension).
    */
   public async replyAndDeleteAfterDelay({
-    interaction,
     message,
-    userId,
     delayMs = INTERACTION_REPLY_TIMEOUT_MS,
+    guildId,
+    interaction,
   }: {
     delayMs?: number;
-  } & ReplyPayload<ChatInputCommandInteraction | ButtonInteraction>): Promise<void> {
-    const { newMessage } = await this.reply({ interaction, message, userId });
+  } & ReplyPayload): Promise<void> {
+    const { newMessage } = await this.reply({ message, guildId, interaction });
     const deleteMessage = async () => {
       if (newMessage) {
         return await newMessage.delete();
@@ -98,16 +98,12 @@ export class DiscordMessageService {
    * Either `interaction`  or `userId` must be provided.
    * We need this because we have 2 options to play a track: either from a command or from an endpoint (request from the Chrome extension).
    */
-  public async reply({
-    interaction,
-    message,
-    userId,
-  }: ReplyPayload<ChatInputCommandInteraction | ButtonInteraction>): Promise<{
+  public async reply({ interaction, message, guildId }: ReplyPayload): Promise<{
     newMessage: Message | null;
   }> {
     try {
       if (!interaction) {
-        return await this.createNewMessage({ userId, message });
+        return await this.createNewMessage({ guildId, message });
       }
       return await this.replyToInteraction({ interaction, message });
     } catch (e) {
@@ -129,7 +125,7 @@ export class DiscordMessageService {
     message,
     interaction,
   }: {
-    interaction: ButtonInteraction | ChatInputCommandInteraction;
+    interaction: ButtonInteraction | CommandInteraction;
     message: ReplyPayload['message'];
   }): Promise<{ newMessage: null }> {
     if (interaction.replied) {
@@ -142,12 +138,12 @@ export class DiscordMessageService {
 
   private async createNewMessage({
     message,
-    userId,
+    guildId,
   }: {
     message: ReplyPayload['message'];
-    userId: string;
+    guildId: string;
   }): Promise<{ newMessage: Message }> {
-    const activeChannel = await this.discordGuildService.getActiveTextChannel(userId);
+    const activeChannel = await this.discordGuildService.getActiveTextChannelByGuildId(guildId);
     if (!activeChannel) {
       return;
     }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   AudioPlayer,
+  AudioPlayerState,
   AudioPlayerStatus,
   VoiceConnection,
   VoiceConnectionStatus,
@@ -9,10 +10,10 @@ import {
   getVoiceConnection,
   joinVoiceChannel,
 } from '@discordjs/voice';
-import { ButtonInteraction, ChatInputCommandInteraction, Guild, GuildMember } from 'discord.js';
+import { Guild, GuildMember, MessagePayload } from 'discord.js';
 import { stream as streamFromYtLink } from 'play-dl';
 
-import { InteractionOrUserId } from 'src/discord/types';
+import { InteractionOrGuildId, InteractionOrUserId } from 'src/discord/types';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { DiscordClientService } from 'src/discord/discord.client.service';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
@@ -35,28 +36,25 @@ export class DiscordAudioService {
     private readonly discordClientService: DiscordClientService,
   ) {}
 
-  public async startAudio({
-    interaction,
-    onSuccess,
-    userId,
-  }: {
-    onSuccess: () => void;
-  } & InteractionOrUserId<ChatInputCommandInteraction>): Promise<void> {
-    const connection = await this.getConnection({ interaction, userId });
+  public getCurrentPlayerStateByGuildId(guildId: string): AudioPlayerState {
+    const { state } = this.playerByGuildId.get(guildId);
+    return state;
+  }
+
+  public async startAudio({ userId, guildId, interaction }: InteractionOrUserId & InteractionOrGuildId): Promise<void> {
+    const connection = await this.getConnection({ interaction, userId, guildId });
     const player = createAudioPlayer();
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
     this.playerByGuildId.set(guildId, player);
 
-    connection.on(VoiceConnectionStatus.Ready, async () => {
-      await this.onConnectionReady(guildId, connection, player);
-      onSuccess();
-    });
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
-        await this.onAudioPlayerIdle({ interaction, userId });
+        await this.onAudioPlayerIdle({ interaction, guildId });
       }
     });
 
+    connection.on(VoiceConnectionStatus.Ready, async () => {
+      await this.onConnectionReady(guildId, connection, player);
+    });
     connection.on('error', (error) => {
       this.logger.error('An error occurred with the voice connection.', error);
       this.discordPlayerMessageService.delete(guildId);
@@ -72,122 +70,71 @@ export class DiscordAudioService {
     // });
   }
 
-  public async pauseOrPlayAudio({ interaction, userId }: InteractionOrUserId<ButtonInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+  public async pauseOrPlayAudio(guildId: string): Promise<MessagePayload | string> {
     const player = this.playerByGuildId.get(guildId);
     if (!player) {
-      return;
+      return 'Player not found';
     }
 
     if (player.state.status === AudioPlayerStatus.Paused) {
       player.unpause();
-      this.discordMessageService.replyAndDeleteAfterDelay({ message: '▶️ Resumed', interaction, userId });
-      return;
+      return '▶️ Resumed';
     }
 
     player.pause();
-    this.discordMessageService.replyAndDeleteAfterDelay({ message: '⏸️ Paused', interaction, userId });
+    return '⏸️ Paused';
   }
 
-  private async onAudioPlayerIdle({
-    interaction,
-    userId,
-  }: InteractionOrUserId<ChatInputCommandInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
-    const nextItem = await this.playQueueService.getNextItem({
-      guildId,
-    });
+  private async onAudioPlayerIdle({ interaction, guildId }: InteractionOrGuildId): Promise<void> {
+    const nextItem = await this.playQueueService.getNextItem({ guildId });
+
     if (!nextItem) {
-      this.disconnectFromVoiceChannel({ interaction, userId });
+      const message = await this.disconnectFromVoiceChannel(guildId);
+      await this.discordMessageService.replyAndDeleteAfterDelay({
+        message,
+        interaction,
+        guildId,
+      });
+
       return;
     }
 
-    await this.playNextTrack({ interaction, userId });
+    await this.playNextTrack(guildId);
   }
 
-  public async disconnectFromVoiceChannel({
-    interaction,
-    userId,
-  }: InteractionOrUserId<ButtonInteraction | ChatInputCommandInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+  public async disconnectFromVoiceChannel(guildId: string): Promise<MessagePayload | string> {
     const connection = getVoiceConnection(guildId);
     connection?.destroy();
 
-    this.discordMessageService.replyAndDeleteAfterDelay({
-      interaction,
-      message: 'Disconnected from the voice channel',
-      userId,
-    });
-
     this.playQueueService.destroyQueue(guildId);
     this.discordPlayerMessageService.delete(guildId);
+
+    return 'Disconnected from the voice channel';
   }
 
-  public async playNextTrack({
-    interaction,
-    stopCurrent,
-    replyToInteraction,
-    userId,
-  }: {
-    stopCurrent?: boolean;
-    replyToInteraction?: boolean;
-  } & InteractionOrUserId<ButtonInteraction | ChatInputCommandInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+  public async playNextTrack(guildId: string): Promise<MessagePayload | string> {
     const player = this.playerByGuildId.get(guildId);
     const nextItem = await this.playQueueService.getNextItem({ guildId });
 
     if (!player || !nextItem) {
-      this.discordMessageService.replyAndDeleteAfterDelay({
-        message: 'No items in the queue',
-        interaction,
-        userId,
-      });
-      return;
+      return 'No items in the queue';
     }
-
-    if (replyToInteraction) {
-      this.discordMessageService.replyAndDeleteAfterDelay({
-        message: 'Playing next track',
-        interaction,
-        userId,
-      });
-    }
-
-    await this.discordPlayerMessageService.sendCurrentTrackDetails({ interaction, userId });
 
     const { stream } = await streamFromYtLink(nextItem.url, {
       discordPlayerCompatibility: true,
     });
     const resource = createAudioResource(stream);
 
-    if (stopCurrent) {
-      player.stop();
-    }
-    player.stop();
     player.play(resource);
   }
 
-  public async playPrevTrack({ interaction, userId }: InteractionOrUserId<ButtonInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+  public async playPrevTrack(guildId: string): Promise<MessagePayload | string> {
     const player = this.playerByGuildId.get(guildId);
     const prevItem = await this.playQueueService.getPrevItem(guildId);
 
     if (!player || !prevItem) {
-      await this.discordMessageService.replyAndDeleteAfterDelay({
-        message: 'No items in the queue',
-        interaction,
-        userId,
-      });
-      return;
+      return 'No items in the queue';
     }
-
-    await this.discordMessageService.replyAndDeleteAfterDelay({
-      message: 'Playing previous track',
-      interaction,
-      userId,
-    });
-
-    await this.discordPlayerMessageService.sendCurrentTrackDetails({ interaction, userId });
 
     const { stream } = await streamFromYtLink(prevItem.url, {
       discordPlayerCompatibility: true,
@@ -196,6 +143,8 @@ export class DiscordAudioService {
 
     player.stop();
     player.play(resource);
+
+    return 'Playing previous track';
   }
 
   private async onConnectionReady(guildId: string, connection: VoiceConnection, player: AudioPlayer): Promise<void> {
@@ -219,9 +168,9 @@ export class DiscordAudioService {
 
   private async getConnection({
     interaction,
+    guildId,
     userId,
-  }: InteractionOrUserId<ChatInputCommandInteraction>): Promise<VoiceConnection> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+  }: InteractionOrUserId & InteractionOrGuildId): Promise<VoiceConnection> {
     const existingConnection = getVoiceConnection(guildId);
     if (existingConnection) {
       return existingConnection;
@@ -245,7 +194,7 @@ export class DiscordAudioService {
   }
 
   private async getActiveGuild(userId: string): Promise<Guild> {
-    const activeGuild = await this.discordGuildService.getActiveGuild(userId);
-    return await this.discordClientService.client.guilds.fetch(activeGuild?.id);
+    const activeGuildId = await this.discordGuildService.getActiveGuildId({ userId, interaction: undefined });
+    return await this.discordClientService.client.guilds.fetch(activeGuildId);
   }
 }

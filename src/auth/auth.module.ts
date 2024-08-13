@@ -25,7 +25,6 @@ import { JwtStrategy } from 'src/auth/strategies/jwt.strategy';
     HttpModule,
     ConfigModule,
     PassportModule,
-
     UserModule,
   ],
   exports: [AuthService],

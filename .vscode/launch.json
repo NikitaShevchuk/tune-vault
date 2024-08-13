@@ -9,10 +9,7 @@
       "name": "Nest dev",
       "request": "launch",
       "type": "node-terminal",
-      "skipFiles": [
-        "<node_internals>/**",
-        "**/node_modules/**"
-      ],
-    },
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    }
   ]
 }

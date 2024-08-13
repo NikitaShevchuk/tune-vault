@@ -2,9 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonInteraction,
   ButtonStyle,
-  CommandInteraction,
+  EmbedBuilder,
   InteractionReplyOptions,
   Message,
   MessageActionRowComponentBuilder,
@@ -13,31 +12,28 @@ import {
   MessagePayload,
 } from 'discord.js';
 
-import { InteractionOrUserId, ReplyPayload } from 'src/discord/types';
-import { PlayQueueService } from 'src/play.queue/play.queue.service';
-import { YoutubeService } from 'src/youtube/youtube.service';
+import { DiscordPlayerState, InteractionOrGuildId, ReplyPayload } from 'src/discord/types';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
 import { DbService } from 'src/db/db.service';
 import { PlayerEvents } from './actions';
+import { TrackDetails } from 'src/youtube/types';
 
 @Injectable()
 export class DiscordPlayerMessageService {
   private readonly logger = new Logger(DiscordPlayerMessageService.name);
 
   constructor(
-    private readonly youtubeService: YoutubeService,
-    private readonly playQueueService: PlayQueueService,
     private readonly discordGuildService: DiscordGuildService,
     private readonly dbService: DbService,
   ) {}
 
   public async sendCurrentTrackDetails({
     interaction,
-    userId,
-  }: InteractionOrUserId<CommandInteraction | ButtonInteraction>): Promise<void> {
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
-    const message = await this.getPlayerMessagePayload(guildId);
-    await this.editOrReply({ interaction, message, userId });
+    guildId,
+    playerState,
+  }: InteractionOrGuildId & { playerState: DiscordPlayerState }): Promise<void> {
+    const message = await this.getPlayerMessagePayload(playerState);
+    await this.editOrReply({ interaction, message, guildId });
   }
 
   public async get(guildId: string): Promise<string | null> {
@@ -48,13 +44,8 @@ export class DiscordPlayerMessageService {
    * Will edit the existing player message if it exists, otherwise will reply to the interaction and save the message id.
    * We don't want to spam the channel with multiple player messages.
    */
-  public async editOrReply(
-    messageOptions: ReplyPayload<CommandInteraction | ButtonInteraction>,
-  ): Promise<Message | null> {
-    const { interaction, userId } = messageOptions;
-
-    const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
-    const playerMessageId = await this.get(guildId);
+  public async editOrReply(messageOptions: ReplyPayload): Promise<Message | null> {
+    const playerMessageId = await this.get(messageOptions.guildId);
 
     if (!playerMessageId) {
       await this.replyToInteractionAndSaveMessageId(messageOptions);
@@ -68,20 +59,16 @@ export class DiscordPlayerMessageService {
     await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId: null } });
   }
 
-  public async getPlayerMessagePayload(guildId: string): Promise<MessagePayload | MessageCreateOptions> {
-    const currentVideo = await this.playQueueService.getCurrentItem(guildId);
-    const nextVideo = await this.playQueueService.getNextItem({
-      guildId,
-      markCurrentAsPlayed: false,
-    });
-
-    if (!currentVideo) {
+  public async getPlayerMessagePayload(
+    playerState: DiscordPlayerState,
+  ): Promise<MessagePayload | MessageCreateOptions> {
+    if (!playerState.currentTrack) {
       return {
         content: 'No items in the queue',
       };
     }
 
-    const embedVideoInfo = await this.youtubeService.getEmbedVideoInfoForDiscord(currentVideo.url, nextVideo?.url);
+    const embedVideoInfo = await this.getEmbedVideoInfoForDiscord(playerState);
     const actionsRow = this.getActionRow();
 
     return {
@@ -123,14 +110,14 @@ export class DiscordPlayerMessageService {
 
   private async editExistingMessage({
     interaction,
-    userId,
+    guildId,
     playerMessageId,
     message,
-  }: { playerMessageId: string } & ReplyPayload<CommandInteraction | ButtonInteraction>): Promise<Message | null> {
+  }: { playerMessageId: string } & ReplyPayload): Promise<Message | null> {
     try {
       const existingMessage = interaction
         ? await interaction.channel.messages.fetch(playerMessageId)
-        : await (await this.discordGuildService.getActiveTextChannel(userId)).messages.fetch(playerMessageId);
+        : await (await this.discordGuildService.getActiveTextChannelByGuildId(guildId)).messages.fetch(playerMessageId);
       if (existingMessage) {
         await existingMessage.edit(message as unknown as MessageEditOptions);
         return existingMessage;
@@ -142,21 +129,47 @@ export class DiscordPlayerMessageService {
     }
   }
 
-  private async replyToInteractionAndSaveMessageId({
-    interaction,
-    message,
-    userId,
-  }: ReplyPayload<CommandInteraction | ButtonInteraction>): Promise<void> {
+  private async replyToInteractionAndSaveMessageId({ interaction, message, guildId }: ReplyPayload): Promise<void> {
     try {
       const newMessage = interaction
         ? await interaction.reply(message as InteractionReplyOptions)
-        : await (await this.discordGuildService.getActiveTextChannel(userId))?.send(message);
-      const guildId = await this.discordGuildService.getActiveGuildId({ userId, interaction });
+        : await (await this.discordGuildService.getActiveTextChannelByUserId(guildId))?.send(message);
       const activeMessageId = (await newMessage?.fetch())?.id;
       await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId } });
     } catch (e) {
+      // TODO add sentry logging
       this.logger.error('Failed to reply to interaction and save message id.', e);
-      return null;
+    }
+  }
+
+  private async getEmbedVideoInfoForDiscord({
+    currentTrack,
+    nextTrack,
+  }: {
+    currentTrack: TrackDetails;
+    nextTrack: TrackDetails;
+  }): Promise<EmbedBuilder> {
+    try {
+      const payload = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle(`${currentTrack.title}  ▶︎ ${currentTrack.formattedDuration} •၊၊||။‌‌‌‌‌၊|•`)
+        .setURL(currentTrack.url)
+        .setAuthor({
+          name: currentTrack.authorName,
+          iconURL: currentTrack.authorThumbnail,
+          url: currentTrack.authorUrl,
+        })
+        .setThumbnail(currentTrack.thumbnail);
+
+      if (nextTrack) {
+        payload.setDescription(`Next  •  **${nextTrack.title}**`);
+      }
+
+      return payload;
+    } catch (e) {
+      // TODO add sentry logging
+      this.logger.error('Failed to get video info', e);
+      return new EmbedBuilder().setColor(0xff0000).setTitle('Failed to get video info');
     }
   }
 }

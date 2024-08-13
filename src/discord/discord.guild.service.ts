@@ -5,6 +5,7 @@ import { DbService } from 'src/db/db.service';
 import { Guild as TuneVaultGuild } from '@prisma/client';
 import { DiscordClientService } from './discord.client.service';
 import { InteractionOrUserId } from './types';
+import { NoTextChannelFound } from './exceptions';
 
 @Injectable()
 export class DiscordGuildService {
@@ -69,27 +70,49 @@ export class DiscordGuildService {
     return await this.dbService.guild.count();
   }
 
-  public async getActiveTextChannel(userId: string): Promise<TextChannel | null> {
+  public async getActiveTextChannelByUserId(userId: string): Promise<TextChannel> {
     const userActiveGuild = await this.getActiveGuild(userId);
-    const guild = await this.discordClientService.client.guilds.fetch(userActiveGuild.id);
+    return await this.getActiveTextChannelFromGuild(userActiveGuild);
+  }
 
-    // Try to get the active channel saved in the database
-    if (userActiveGuild.activeChannelId) {
-      const channel = await guild.channels.fetch(userActiveGuild.activeChannelId);
-      if (!channel.isTextBased()) {
-        return null;
-      }
-      return channel as TextChannel;
+  public async getActiveTextChannelByGuildId(guildId: string): Promise<TextChannel> {
+    const tuneVaultGuild = await this.find(guildId);
+    return await this.getActiveTextChannelFromGuild(tuneVaultGuild);
+  }
+
+  private async getActiveTextChannelFromGuild(tuneVaultGuild: TuneVaultGuild): Promise<TextChannel> {
+    const discordGuild = await this.discordClientService.client.guilds.fetch(tuneVaultGuild.id);
+
+    if (tuneVaultGuild.activeChannelId) {
+      return await this.fetchTextBasedChannelById(discordGuild, tuneVaultGuild.activeChannelId);
     }
 
-    // Fallback to the first text channel in the guild
-    const channels = await guild.channels.fetch();
+    const textChannel = await this.fetchAnyTextBasedChannelFromGuild(discordGuild);
+    await this.update({ ...tuneVaultGuild, activeChannelId: textChannel.id });
+    return textChannel;
+  }
+
+  private async fetchAnyTextBasedChannelFromGuild(discordGuild: Guild): Promise<TextChannel> {
+    const channels = await discordGuild.channels.fetch();
     const textChannel = channels.find((channel) => channel.isTextBased()) as TextChannel;
     if (!textChannel) {
-      return null;
+      throw new NoTextChannelFound(
+        '"activeChannelId" saved in the DB is not text-based for guild with id: ',
+        discordGuild.id,
+      );
     }
-    await this.update({ ...userActiveGuild, activeChannelId: textChannel.id });
     return textChannel;
+  }
+
+  private async fetchTextBasedChannelById(discordGuild: Guild, channelId: string): Promise<TextChannel> {
+    const channel = await discordGuild.channels.fetch(channelId);
+    if (!channel.isTextBased()) {
+      throw new NoTextChannelFound(
+        '"activeChannelId" saved in the DB is not text-based for guild with id: ',
+        discordGuild.id,
+      );
+    }
+    return channel as TextChannel;
   }
 
   public async updateActiveGuildBasedOnInteraction(interaction: Interaction): Promise<void> {

@@ -4,4 +4,6 @@ export enum PlayerEvents {
 
   PAUSE_OR_PLAY = 'PAUSE_OR_PLAY',
   DISCONNECT_BOT = 'DISCONNECT_BOT',
+
+  CURRENT_TRACK = 'CURRENT_TRACK',
 }
