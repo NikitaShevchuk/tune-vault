@@ -4,6 +4,12 @@ export class InvalidLinkError extends Error {
   }
 }
 
+export class UnknownSourceError extends Error {
+  constructor(message = 'Unknown track or playlist source') {
+    super(message);
+  }
+}
+
 export class NotVoiceChannelMemberError extends Error {
   constructor(message = 'User must be a member of a voice channel to play audio') {
     super(message);

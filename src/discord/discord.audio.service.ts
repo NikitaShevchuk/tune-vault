@@ -36,15 +36,32 @@ export class DiscordAudioService {
     private readonly discordClientService: DiscordClientService,
   ) {}
 
-  public getCurrentPlayerStateByGuildId(guildId: string): AudioPlayerState {
-    const { state } = this.playerByGuildId.get(guildId);
-    return state;
+  public getCurrentPlayerStateByGuildId(guildId: string): AudioPlayerState | undefined {
+    const player = this.playerByGuildId.get(guildId);
+    return player?.state;
   }
 
-  public async startAudio({ userId, guildId, interaction }: InteractionOrUserId & InteractionOrGuildId): Promise<void> {
+  public async startAudio({
+    userId,
+    guildId,
+    interaction,
+    sourceUrl,
+  }: { sourceUrl: string } & InteractionOrUserId & InteractionOrGuildId): Promise<void> {
     const connection = await this.getConnection({ interaction, userId, guildId });
     const player = createAudioPlayer();
     this.playerByGuildId.set(guildId, player);
+
+    await new Promise<void>((resolve, reject) =>
+      connection.on(VoiceConnectionStatus.Ready, async () => {
+        try {
+          await this.createNewStreamAndPlayAudio({ connection, player, sourceUrl });
+          await this.playQueueService.markItemAsPlayed({ guildId, itemUrl: sourceUrl });
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }),
+    );
 
     player.on('stateChange', async (_, { status }) => {
       if (status === AudioPlayerStatus.Idle) {
@@ -52,9 +69,6 @@ export class DiscordAudioService {
       }
     });
 
-    connection.on(VoiceConnectionStatus.Ready, async () => {
-      await this.onConnectionReady(guildId, connection, player);
-    });
     connection.on('error', (error) => {
       this.logger.error('An error occurred with the voice connection.', error);
       this.discordPlayerMessageService.delete(guildId);
@@ -106,8 +120,8 @@ export class DiscordAudioService {
     const connection = getVoiceConnection(guildId);
     connection?.destroy();
 
-    this.playQueueService.destroyQueue(guildId);
-    this.discordPlayerMessageService.delete(guildId);
+    await this.playQueueService.destroyQueue(guildId);
+    await this.discordPlayerMessageService.delete(guildId);
 
     return 'Disconnected from the voice channel';
   }
@@ -147,23 +161,21 @@ export class DiscordAudioService {
     return 'Playing previous track';
   }
 
-  private async onConnectionReady(guildId: string, connection: VoiceConnection, player: AudioPlayer): Promise<void> {
-    try {
-      const itemToPlay = await this.playQueueService.getNextItem({ guildId });
-      if (!itemToPlay) {
-        this.logger.error('Warning! No items to play. We should not be here.');
-        return;
-      }
-
-      const { stream } = await streamFromYtLink(itemToPlay.url, {
-        discordPlayerCompatibility: true,
-      });
-      const resource = createAudioResource(stream);
-      connection.subscribe(player);
-      player.play(resource);
-    } catch (e) {
-      this.logger.error('Failed to play audio.', e);
-    }
+  private async createNewStreamAndPlayAudio({
+    sourceUrl,
+    player,
+    connection,
+  }: {
+    connection: VoiceConnection;
+    player: AudioPlayer;
+    sourceUrl: string;
+  }): Promise<void> {
+    const { stream } = await streamFromYtLink(sourceUrl, {
+      discordPlayerCompatibility: true,
+    });
+    const resource = createAudioResource(stream);
+    connection.subscribe(player);
+    player.play(resource);
   }
 
   private async getConnection({

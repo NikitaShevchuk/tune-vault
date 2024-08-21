@@ -4,11 +4,16 @@ import { ChatInputCommandInteraction, GuildMember, MessagePayload } from 'discor
 
 import { DiscordAudioService } from '../discord.audio.service';
 import { PlayerEvents } from './actions';
-import { DiscordPlayerState, InteractionOrGuildId, InteractionOrUserId } from '../types';
+import { DiscordPlayerState, InteractionOrUserId } from '../types';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
 import { YoutubeService } from 'src/youtube/youtube.service';
 import { DiscordGuildService } from '../discord.guild.service';
-import { InvalidLinkError, InvalidPlayerActionError, NotVoiceChannelMemberError } from '../exceptions';
+import {
+  InvalidLinkError,
+  InvalidPlayerActionError,
+  NotVoiceChannelMemberError,
+  UnknownSourceError,
+} from '../exceptions';
 
 @Injectable()
 export class DiscordPlayerService {
@@ -22,14 +27,19 @@ export class DiscordPlayerService {
   ) {}
 
   public async getCurrentPlayerState(guildId: string): Promise<DiscordPlayerState> {
-    const currentVideo = await this.playQueueService.getCurrentItem(guildId);
-    const nextVideo = await this.playQueueService.getNextItem({
-      guildId,
-      markCurrentAsPlayed: false,
-    });
+    const [currentVideo, nextVideo] = await Promise.all([
+      this.playQueueService.getCurrentItem(guildId),
+      this.playQueueService.getNextItem({
+        guildId,
+        markCurrentAsPlayed: false,
+      }),
+    ]);
 
-    const currentVideoDetails = currentVideo?.url ? await this.youtubeService.getVideoInfo(currentVideo?.url) : null;
-    const nextVideoDetails = nextVideo?.url ? await this.youtubeService.getVideoInfo(nextVideo?.url) : null;
+    const [currentVideoDetails, nextVideoDetails] = await Promise.all([
+      currentVideo?.url ? this.youtubeService.getVideoInfo(currentVideo?.url) : null,
+      nextVideo?.url ? this.youtubeService.getVideoInfo(nextVideo?.url) : null,
+    ]);
+
     const guildPlayer = this.discordAudioService.getCurrentPlayerStateByGuildId(guildId);
     const isPaused = guildPlayer?.status === AudioPlayerStatus.Paused;
 
@@ -40,13 +50,7 @@ export class DiscordPlayerService {
     };
   }
 
-  public async playFromHttp({
-    userInput,
-    userId,
-  }: {
-    userInput: string;
-    userId: string;
-  }): Promise<MessagePayload | string | null> {
+  public async playFromHttp({ userInput, userId }: { userInput: string; userId: string }): Promise<string | null> {
     try {
       return await this.play({ userInput, userId, interaction: undefined });
     } catch (e) {
@@ -60,7 +64,7 @@ export class DiscordPlayerService {
     }
   }
 
-  public async playFromInteraction(interaction: ChatInputCommandInteraction): Promise<MessagePayload | string | null> {
+  public async playFromInteraction(interaction: ChatInputCommandInteraction): Promise<string | null> {
     const userInput = interaction.options.getString('link');
 
     if (!(interaction.member as GuildMember).voice.channel) {
@@ -103,116 +107,109 @@ export class DiscordPlayerService {
    * Plays a track or a playlist from a given URL
    * Either an interaction or a user ID must be provided
    */
-  public async play({
-    userInput: url,
+  private async play({
+    userInput,
     interaction,
     userId,
-  }: { userInput: string } & InteractionOrUserId): Promise<MessagePayload | string | null> {
-    const { isValid, isPlaylist, isYouTubeLink } = this.youtubeService.validateAndGetLinkInfo(url);
+  }: { userInput: string } & InteractionOrUserId): Promise<string | null> {
+    const initialValidationResult = this.youtubeService.validateAndGetLinkInfo(userInput);
+    const { isValid, isPlaylist, isTrackLink } = initialValidationResult;
 
-    if (isYouTubeLink && !isValid) {
+    if ((isTrackLink || isPlaylist) && !isValid) {
       throw new InvalidLinkError();
     }
 
     const guildId = await this.discordGuildService.getActiveGuildId({ interaction, userId });
-    const hasItemsInQueue = Boolean((await this.playQueueService.getOrCreatePlayQueue(guildId)).queue.length);
 
-    if (isPlaylist) {
-      const message = await this.pushPlaylistToQueue({ guildId, playlistUrl: url });
-      if (!hasItemsInQueue) {
-        await this.discordAudioService.startAudio({ interaction, guildId, userId });
-      }
-      return message;
-    }
-
-    if (isYouTubeLink) {
-      return await this.pushToQueueAndPlayIfQueueWasEmpty({
-        hasItemsInQueue,
-        mediaUrl: url,
-        interaction,
-        guildId,
+    if (isTrackLink || isPlaylist) {
+      return await this.playFromValidatedSource({
+        mediaUrl: userInput,
         userId,
+        guildId,
+        interaction,
+        validationResult: initialValidationResult,
       });
     }
 
-    const searchResult = await this.youtubeService.search(url);
+    return await this.handleSearch({ userInput, interaction, userId, guildId });
+  }
+
+  private async handleSearch({
+    userInput,
+    interaction,
+    guildId,
+    userId,
+  }: {
+    userInput: string;
+    guildId: string;
+  } & InteractionOrUserId): Promise<string> {
+    const searchResult = await this.youtubeService.search(userInput);
+
     if (!searchResult) {
       return '⛔ No results found';
     }
 
-    return await this.pushToQueueAndPlayIfQueueWasEmpty({
-      hasItemsInQueue,
-      mediaUrl: searchResult.url,
+    const { url } = searchResult;
+    const searchResultValidationResult = this.youtubeService.validateAndGetLinkInfo(url);
+    return await this.playFromValidatedSource({
+      mediaUrl: url,
+      userId,
       guildId,
       interaction,
-      userId,
+      validationResult: searchResultValidationResult,
     });
   }
 
-  private async pushToQueueAndPlayIfQueueWasEmpty({
-    hasItemsInQueue,
+  private async playFromValidatedSource({
     mediaUrl,
-    guildId,
     interaction,
+    guildId,
     userId,
-  }: InteractionOrGuildId &
-    InteractionOrUserId & {
-      hasItemsInQueue: boolean;
-      mediaUrl: string;
-    }): Promise<MessagePayload | string> {
-    if (hasItemsInQueue) {
-      return await this.pushSingleItemToQueue({ mediaUrl, guildId });
+    validationResult: { isPlaylist, isTrackLink },
+  }: {
+    mediaUrl: string;
+    guildId: string;
+    validationResult: ReturnType<YoutubeService['validateAndGetLinkInfo']>;
+  } & InteractionOrUserId): Promise<string> {
+    const hadItemsInTheQueuePreviosly = await this.playQueueService.hasItemsInTheQueue(guildId);
+    let message: string | null = null;
+
+    if (isTrackLink) {
+      message = await this.pushTrackLinkToQueueAndGetMessage({ mediaUrl, guildId });
+    } else if (isPlaylist) {
+      message = await this.pushPlaylistToQueueAndGetMessage({ mediaUrl, guildId });
+    } else {
+      throw new UnknownSourceError();
     }
 
-    await this.playQueueService.pushToQueue({
-      guildId,
-      urls: mediaUrl,
-    });
+    if (!hadItemsInTheQueuePreviosly) {
+      await this.discordAudioService.startAudio({ interaction, guildId, userId, sourceUrl: mediaUrl });
+    }
 
-    await this.discordAudioService.startAudio({
-      interaction,
-      guildId,
-      userId,
-    });
+    return message;
   }
 
-  private async pushSingleItemToQueue({
+  private async pushTrackLinkToQueueAndGetMessage({
     guildId,
     mediaUrl,
   }: {
     mediaUrl: string;
     guildId: string;
-  }): Promise<MessagePayload | string> {
-    await this.playQueueService.pushToQueue({
-      guildId,
-      urls: mediaUrl,
-    });
-
-    try {
-      const { title } = await this.youtubeService.getVideoInfo(mediaUrl);
-      return `Added to queue: **${title}**`;
-    } catch (e) {
-      // TODO add sentry logging
-      this.logger.error('Failed to get video details', e);
-      return 'Unknown';
-    }
+  }): Promise<string> {
+    await this.playQueueService.pushToQueue({ guildId, urls: mediaUrl });
+    const { title } = await this.youtubeService.getVideoInfo(mediaUrl);
+    return `Added to queue: **${title}**`;
   }
 
-  private async pushPlaylistToQueue({
-    playlistUrl,
+  private async pushPlaylistToQueueAndGetMessage({
     guildId,
+    mediaUrl,
   }: {
-    playlistUrl: string;
+    mediaUrl: string;
     guildId: string;
-  }): Promise<MessagePayload | string | null> {
-    const playlistInfo = await this.youtubeService.getPlaylistInfo(playlistUrl);
-    if (!playlistInfo) {
-      return;
-    }
-
-    const { videosUrls, playlistTitle } = playlistInfo;
+  }): Promise<string> {
+    const { videosUrls, playlistTitle } = await this.youtubeService.getPlaylistInfo(mediaUrl);
     await this.playQueueService.pushToQueue({ urls: videosUrls, guildId });
-
     return `Added **${videosUrls.length}** items from **${playlistTitle}** to queue`;
   }
 }

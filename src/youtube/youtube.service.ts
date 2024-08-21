@@ -37,7 +37,7 @@ export class YoutubeService {
     isValid: boolean;
     isVideo: boolean;
     isPlaylist: boolean;
-    isYouTubeLink: boolean;
+    isTrackLink: boolean;
   } {
     const formattedInput = (input.includes('music.') ? input : input.replaceAll('music.', '')).trim();
     const linkInfo = validateYtURL(formattedInput);
@@ -45,13 +45,13 @@ export class YoutubeService {
     const isVideo = linkInfo === 'video';
     const isPlaylist = linkInfo === 'playlist';
     const isValid = isVideo || isPlaylist;
-    const isYouTubeLink = input?.includes('youtube.com');
+    const isTrackLink = input?.includes('youtube.com');
 
     return {
       isValid,
       isVideo,
       isPlaylist,
-      isYouTubeLink,
+      isTrackLink,
     };
   }
 

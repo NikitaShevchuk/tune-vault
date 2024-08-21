@@ -32,6 +32,12 @@ import { DiscordPlayerService } from 'src/discord/player/discord.player.service'
   ],
   imports: [YoutubeModule, PlayQueueModule, ConfigModule, HttpModule, UserModule],
   controllers: [DiscordController],
-  exports: [DiscordService, DiscordPlayerService, DiscordGuildService, DiscordMessageService],
+  exports: [
+    DiscordService,
+    DiscordPlayerService,
+    DiscordGuildService,
+    DiscordMessageService,
+    DiscordPlayerMessageService,
+  ],
 })
 export class DiscordModule {}

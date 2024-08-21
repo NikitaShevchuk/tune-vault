@@ -4,7 +4,6 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  InteractionReplyOptions,
   Message,
   MessageActionRowComponentBuilder,
   MessageCreateOptions,
@@ -14,9 +13,9 @@ import {
 
 import { DiscordPlayerState, InteractionOrGuildId, ReplyPayload } from 'src/discord/types';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
-import { DbService } from 'src/db/db.service';
 import { PlayerEvents } from './actions';
 import { TrackDetails } from 'src/youtube/types';
+import { DiscordMessageService } from '../discord.message.service';
 
 @Injectable()
 export class DiscordPlayerMessageService {
@@ -24,7 +23,7 @@ export class DiscordPlayerMessageService {
 
   constructor(
     private readonly discordGuildService: DiscordGuildService,
-    private readonly dbService: DbService,
+    private readonly discordMessageService: DiscordMessageService,
   ) {}
 
   public async sendCurrentTrackDetails({
@@ -37,7 +36,7 @@ export class DiscordPlayerMessageService {
   }
 
   public async get(guildId: string): Promise<string | null> {
-    return (await this.dbService.guild.findUnique({ where: { id: guildId } }))?.activeMessageId;
+    return (await this.discordGuildService.find(guildId))?.activeMessageId;
   }
 
   /**
@@ -56,10 +55,10 @@ export class DiscordPlayerMessageService {
   }
 
   public async delete(guildId: string): Promise<void> {
-    await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId: null } });
+    await this.discordGuildService.update({ id: guildId, activeMessageId: null });
   }
 
-  public async getPlayerMessagePayload(
+  private async getPlayerMessagePayload(
     playerState: DiscordPlayerState,
   ): Promise<MessagePayload | MessageCreateOptions> {
     if (!playerState.currentTrack) {
@@ -131,11 +130,9 @@ export class DiscordPlayerMessageService {
 
   private async replyToInteractionAndSaveMessageId({ interaction, message, guildId }: ReplyPayload): Promise<void> {
     try {
-      const newMessage = interaction
-        ? await interaction.reply(message as InteractionReplyOptions)
-        : await (await this.discordGuildService.getActiveTextChannelByUserId(guildId))?.send(message);
+      const { newMessage } = await this.discordMessageService.reply({ interaction, guildId, message });
       const activeMessageId = (await newMessage?.fetch())?.id;
-      await this.dbService.guild.update({ where: { id: guildId }, data: { activeMessageId } });
+      await this.discordGuildService.update({ id: guildId, activeMessageId });
     } catch (e) {
       // TODO add sentry logging
       this.logger.error('Failed to reply to interaction and save message id.', e);

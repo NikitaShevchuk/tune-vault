@@ -9,6 +9,8 @@ import { FindGuildsDto } from 'src/discord/dto/find.guilds.dto';
 import { UserService } from 'src/user/user.service';
 import { DiscordPlayerService } from './player/discord.player.service';
 import { DiscordPlayerMessageService } from './player/discord.player.message.service';
+import { DiscordMessageService } from './discord.message.service';
+import { PlayQueueService } from 'src/play.queue/play.queue.service';
 
 @Controller('discord')
 export class DiscordController {
@@ -19,6 +21,8 @@ export class DiscordController {
     private readonly userService: UserService,
     private readonly discordPlayerService: DiscordPlayerService,
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
+    private readonly discordMessageService: DiscordMessageService,
+    private readonly playQueueService: PlayQueueService,
   ) {}
 
   @Get('guild')
@@ -35,15 +39,17 @@ export class DiscordController {
       throw new BadRequestException('No active guild found');
     }
 
-    await this.discordPlayerMessageService.editOrReply({
+    const hasItemsInTheQeue = await this.playQueueService.hasItemsInTheQueue(user.activeGuildId);
+    await this.discordMessageService.displayMessage({
       message: 'Loading details...',
       interaction: undefined,
       guildId: user.activeGuildId,
+      shouldDeleteAfterDelay: hasItemsInTheQeue,
     });
 
     const message = await this.discordPlayerService.playFromHttp({ userInput: url, userId: user.id });
     if (message) {
-      await this.discordPlayerMessageService.editOrReply({
+      await this.discordMessageService.displayMessage({
         message,
         interaction: undefined,
         guildId: user.activeGuildId,

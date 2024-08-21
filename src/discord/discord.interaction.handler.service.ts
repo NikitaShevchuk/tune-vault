@@ -8,6 +8,7 @@ import { UserService } from 'src/user/user.service';
 import { DiscordPlayerService } from 'src/discord/player/discord.player.service';
 import { InvalidLinkError, NotVoiceChannelMemberError } from './exceptions';
 import { DiscordPlayerMessageService } from './player/discord.player.message.service';
+import { PlayQueueService } from 'src/play.queue/play.queue.service';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
@@ -19,6 +20,7 @@ export class DiscordInteractionHandlerService {
     private readonly userService: UserService,
     private readonly discordPlayerService: DiscordPlayerService,
     private readonly discordPlayerMessageService: DiscordPlayerMessageService,
+    private readonly playQueueService: PlayQueueService,
   ) {}
 
   public async handleInteraction(interaction: Interaction): Promise<void> {
@@ -37,11 +39,22 @@ export class DiscordInteractionHandlerService {
         guildId: interaction.guildId,
       });
 
-      await this.discordMessageService.replyAndDeleteAfterDelay({
-        message,
-        interaction,
-        guildId: interaction.guildId,
-      });
+      const playerState = await this.discordPlayerService.getCurrentPlayerState(interaction.guildId);
+
+      const sendMessagesRequests = [
+        this.discordMessageService.replyAndDeleteAfterDelay({
+          message,
+          interaction,
+          guildId: interaction.guildId,
+        }),
+        this.discordPlayerMessageService.sendCurrentTrackDetails({
+          interaction,
+          guildId: interaction.guildId,
+          playerState,
+        }),
+      ];
+
+      await Promise.all(sendMessagesRequests);
       return;
     }
 
@@ -91,16 +104,18 @@ export class DiscordInteractionHandlerService {
   }
 
   private async handlePlayCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-    await this.discordPlayerMessageService.editOrReply({
+    const hasItemsInTheQeue = await this.playQueueService.hasItemsInTheQueue(interaction.guildId);
+    await this.discordMessageService.displayMessage({
       message: 'Loading details...',
       interaction,
       guildId: interaction.guildId,
+      shouldDeleteAfterDelay: hasItemsInTheQeue,
     });
 
     try {
       const message = await this.discordPlayerService.playFromInteraction(interaction);
       if (message) {
-        await this.discordPlayerMessageService.editOrReply({
+        await this.discordMessageService.displayMessage({
           message,
           interaction,
           guildId: interaction.guildId,

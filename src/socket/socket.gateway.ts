@@ -24,6 +24,7 @@ import { DiscordPlayerState } from 'src/discord/types';
 import { DiscordMessageService } from 'src/discord/discord.message.service';
 import { InvalidPlayerActionError } from 'src/discord/exceptions';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
+import { DiscordPlayerMessageService } from 'src/discord/player/discord.player.message.service';
 
 const CHANGE_PLAYER_STATE_EVENT = 'CHANGE_PLAYER_STATE' as const;
 
@@ -38,6 +39,7 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     private readonly authService: AuthService,
     private readonly discordMessageService: DiscordMessageService,
     private readonly discordGuildService: DiscordGuildService,
+    private readonly discordPlayerMessageService: DiscordPlayerMessageService,
   ) {}
 
   public afterInit() {
@@ -83,11 +85,22 @@ export class SocketGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         guildId,
       });
 
-      await this.discordMessageService.replyAndDeleteAfterDelay({
-        message,
-        interaction: undefined,
-        guildId,
-      });
+      const playerState = await this.discordPlayerService.getCurrentPlayerState(guildId);
+
+      const sendMessagesRequests = [
+        this.discordMessageService.replyAndDeleteAfterDelay({
+          message,
+          interaction: undefined,
+          guildId,
+        }),
+        this.discordPlayerMessageService.sendCurrentTrackDetails({
+          interaction: undefined,
+          guildId,
+          playerState,
+        }),
+      ];
+
+      await Promise.all(sendMessagesRequests);
     } catch (error) {
       if (error instanceof InvalidPlayerActionError) {
         throw new WsException('Invalid Payload');

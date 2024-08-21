@@ -11,6 +11,10 @@ export class PlayQueueService {
 
   constructor(private readonly dbService: DbService) {}
 
+  public async hasItemsInTheQueue(guildId: string): Promise<boolean> {
+    return Boolean((await this.getOrCreatePlayQueue(guildId)).queue.length);
+  }
+
   public async getOrCreatePlayQueue(guildId: string): Promise<PlayQueue> {
     const playQueue = await this.dbService.playQueue.findUnique({ where: { guildId } });
     if (playQueue) {
@@ -98,6 +102,14 @@ export class PlayQueueService {
       // TODO add Sentry loggin
       this.logger.error('Failed to destroy the existing queue', e);
     }
+  }
+
+  public async markItemAsPlayed({ guildId, itemUrl }: { guildId: string; itemUrl: string }): Promise<PlayQueue> {
+    const currentQueue = await this.getOrCreatePlayQueue(guildId);
+    const updatedQueue = currentQueue.queue.map((queueItem) =>
+      queueItem.url === itemUrl ? { ...queueItem, alreadyPlayed: true } : queueItem,
+    );
+    return await this.updateQueue(guildId, updatedQueue);
   }
 
   private async updateQueue(guildId: string, updatedQueue: PlayQueueType): Promise<PlayQueue> {
