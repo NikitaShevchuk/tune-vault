@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { Controller, Get, Req, Res, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CookieOptions, Request, Response } from 'express';
 
@@ -47,7 +47,7 @@ export class AuthController {
     return res.redirect(`${uiUrl}/after-auth`);
   }
 
-  @Get('logout')
+  @Delete('logout')
   @UseGuards(JwtAuthGuard)
   public async logout(@Req() req: Request, @Res() res: Response) {
     const uiHost = this.configService.get('uiHost');
