@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChatInputCommandInteraction, Interaction } from 'discord.js';
+import { ButtonInteraction, ChatInputCommandInteraction, Interaction } from 'discord.js';
 
 import { Commands, commands } from 'src/discord/constants';
 import { DiscordGuildService } from 'src/discord/discord.guild.service';
@@ -9,6 +9,7 @@ import { DiscordPlayerService } from 'src/discord/player/discord.player.service'
 import { InvalidLinkError, NotVoiceChannelMemberError } from './exceptions';
 import { DiscordPlayerMessageService } from './player/discord.player.message.service';
 import { PlayQueueService } from 'src/play.queue/play.queue.service';
+import { PlayerEvents } from './player/actions';
 
 @Injectable()
 export class DiscordInteractionHandlerService {
@@ -27,45 +28,53 @@ export class DiscordInteractionHandlerService {
     this.logger.log(
       `New interaction detected. Server ID: ${interaction.guildId}. Is command: ${interaction.isCommand()}. Is button: ${interaction.isButton()}.`,
     );
-    this.discordGuildService.updateActiveGuildBasedOnInteraction(interaction);
+    await this.discordGuildService.updateActiveGuildBasedOnInteraction(interaction);
     this.userService.updateActiveGuildIdBasedOnInteraction(interaction);
 
-    if (interaction.isCommand()) {
+    if (interaction.isChatInputCommand()) {
       return await this.handleCommandInteraction(interaction);
     }
     if (interaction.isButton()) {
-      const message = await this.discordPlayerService.changePlayerState({
-        action: interaction.customId,
-        guildId: interaction.guildId,
-      });
-
-      const playerState = await this.discordPlayerService.getCurrentPlayerState(interaction.guildId);
-
-      const sendMessagesRequests = [
-        this.discordMessageService.replyAndDeleteAfterDelay({
-          message,
-          interaction,
-          guildId: interaction.guildId,
-        }),
-        this.discordPlayerMessageService.sendCurrentTrackDetails({
-          interaction,
-          guildId: interaction.guildId,
-          playerState,
-        }),
-      ];
-
-      await Promise.all(sendMessagesRequests);
-      return;
+      return this.handleButtonInteraction(interaction);
     }
 
     throw new Error('Unknown interaction type');
   }
 
-  private async handleCommandInteraction(interaction: Interaction): Promise<void> {
-    if (!interaction.isChatInputCommand()) {
-      return;
+  private async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    const isPlayerButton = Object.values(PlayerEvents).includes(interaction.customId as PlayerEvents);
+    if (!isPlayerButton) {
+      throw new Error('Unknown button ID');
     }
 
+    await this.handlePlayerButtonInteraction(interaction);
+  }
+
+  private async handlePlayerButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    const message = await this.discordPlayerService.changePlayerState({
+      action: interaction.customId,
+      guildId: interaction.guildId,
+    });
+
+    const playerState = await this.discordPlayerService.getCurrentPlayerState(interaction.guildId);
+
+    const sendMessagesRequests = [
+      this.discordMessageService.replyAndDeleteAfterDelay({
+        message,
+        interaction,
+        guildId: interaction.guildId,
+      }),
+      this.discordPlayerMessageService.sendCurrentTrackDetails({
+        interaction,
+        guildId: interaction.guildId,
+        playerState,
+      }),
+    ];
+
+    await Promise.all(sendMessagesRequests);
+  }
+
+  private async handleCommandInteraction(interaction: ChatInputCommandInteraction): Promise<void> {
     const isUnknownCommand = !commands.find(({ name }) => name === interaction.commandName);
     if (isUnknownCommand) {
       await this.discordMessageService.replyAndDeleteAfterDelay({
@@ -77,7 +86,7 @@ export class DiscordInteractionHandlerService {
     }
 
     if (interaction.commandName === Commands.REFRESH_COMMANDS) {
-      interaction.guild.commands.set(commands);
+      await interaction.guild.commands.set(commands);
       await this.discordMessageService.replyAndDeleteAfterDelay({
         interaction,
         message: 'Commands refreshed',
